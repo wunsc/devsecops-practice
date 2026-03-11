@@ -1,0 +1,126 @@
+# infra/phase24/backup-postgresql-cronjob.yaml
+# CronJob: Daily PostgreSQL backup via pg_dump.
+#
+# Dumps the sampleapi database to a compressed file on a PVC.
+# In production, this should be extended to upload to S3/ODF bucket.
+#
+# SCHEDULE: Daily at 02:00 UTC
+# RETENTION: Keeps last 7 backups on the PVC
+#
+# APPLY (per namespace):
+#   oc apply -f backup-postgresql-cronjob.yaml -n sampleapi-prod
+#
+# VERIFY:
+#   oc get cronjob postgresql-backup -n sampleapi-prod
+#   oc get jobs -n sampleapi-prod -l app=postgresql-backup
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgresql-backup-pvc
+  namespace: sampleapi-prod
+  labels:
+    app: postgresql-backup
+    team: devsecops
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: gp3-csi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgresql-backup
+  namespace: sampleapi-prod
+  labels:
+    app: postgresql-backup
+    team: devsecops
+spec:
+  schedule: "0 2 * * *"                          # Daily 02:00 UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 1800                 # 30 minutes max
+      template:
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: sampleapi-sa
+          volumes:
+            - name: backup-storage
+              persistentVolumeClaim:
+                claimName: postgresql-backup-pvc
+          containers:
+            - name: pg-backup
+              image: registry.redhat.io/rhel9/postgresql-16:latest
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  set -e
+                  TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+                  BACKUP_DIR="/backups"
+                  BACKUP_FILE="${BACKUP_DIR}/sampleapi_${TIMESTAMP}.sql.gz"
+
+                  echo "=== PostgreSQL Backup — ${TIMESTAMP} ==="
+                  echo "Database: ${POSTGRESQL_DATABASE}"
+                  echo "Host: postgresql.sampleapi-prod.svc"
+                  echo "Output: ${BACKUP_FILE}"
+
+                  # Run pg_dump
+                  PGPASSWORD="${POSTGRESQL_PASSWORD}" pg_dump \
+                    -h postgresql.sampleapi-prod.svc \
+                    -U "${POSTGRESQL_USER}" \
+                    -d "${POSTGRESQL_DATABASE}" \
+                    --no-owner \
+                    --no-privileges \
+                    | gzip > "${BACKUP_FILE}"
+
+                  # Verify backup is non-empty
+                  SIZE=$(stat -c%s "${BACKUP_FILE}")
+                  echo "Backup size: ${SIZE} bytes"
+                  if [ "$SIZE" -lt 100 ]; then
+                    echo "ERROR: Backup file too small — likely empty or failed"
+                    exit 1
+                  fi
+
+                  # Rotate — keep last 7 backups
+                  echo "Rotating old backups (keeping last 7)..."
+                  ls -1t ${BACKUP_DIR}/sampleapi_*.sql.gz 2>/dev/null | tail -n +8 | xargs rm -f 2>/dev/null || true
+
+                  echo "Current backups:"
+                  ls -lh ${BACKUP_DIR}/sampleapi_*.sql.gz 2>/dev/null
+
+                  echo ""
+                  echo "=== Backup completed — $(date) ==="
+              env:
+                - name: POSTGRESQL_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: infra-secret
+                      key: POSTGRESQL_USER
+                - name: POSTGRESQL_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: infra-secret
+                      key: POSTGRESQL_PASSWORD
+                - name: POSTGRESQL_DATABASE
+                  valueFrom:
+                    secretKeyRef:
+                      name: infra-secret
+                      key: POSTGRESQL_DATABASE
+              volumeMounts:
+                - name: backup-storage
+                  mountPath: /backups
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m
+                  memory: 512Mi

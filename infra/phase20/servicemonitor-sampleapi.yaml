@@ -1,0 +1,50 @@
+# infra/phase20/servicemonitor-sampleapi.yaml
+# ServiceMonitor for SampleApi — tells Prometheus to scrape /metrics from SampleApi pods.
+#
+# Prometheus discovers targets via ServiceMonitor CRDs. This monitors:
+#   - HTTP request rate, duration, and error count (prometheus-net built-in)
+#   - Custom business metrics (sampleapi_forecasts_total, sampleapi_cache_operations_total, etc.)
+#
+# The ServiceMonitor matches Services by label selector. SampleApi's Service must have
+# the label "app: sampleapi" — which is set by the Kustomize base.
+#
+# DEPLOY TO: Each app namespace (DEV, SIT, UAT, PROD).
+# Use Kustomize to apply to all environments, or apply per-namespace:
+#   oc apply -f servicemonitor-sampleapi.yaml -n sampleapi-dev
+#   oc apply -f servicemonitor-sampleapi.yaml -n sampleapi-sit
+#   oc apply -f servicemonitor-sampleapi.yaml -n sampleapi-uat
+#   oc apply -f servicemonitor-sampleapi.yaml -n sampleapi-prod
+#
+# VERIFY:
+#   oc get servicemonitor -n sampleapi-dev
+#   # In OCP Console → Observe → Targets: look for sampleapi-monitor endpoint
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: sampleapi-monitor
+  labels:
+    app: sampleapi
+    team: devsecops
+spec:
+  # Match the SampleApi Service by label
+  selector:
+    matchLabels:
+      app: sampleapi
+
+  # Which port to scrape — must match the Service port name
+  endpoints:
+    - port: http                               # Service port name (8080)
+      path: /metrics                           # prometheus-net default metrics path
+      interval: 30s                            # Scrape every 30 seconds
+      scrapeTimeout: 10s                       # Timeout per scrape
+      # Add namespace label for multi-env queries
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          targetLabel: pod
+
+  # Only match Services in the same namespace as this ServiceMonitor
+  namespaceSelector:
+    matchNames: []                             # Empty = same namespace as this CR

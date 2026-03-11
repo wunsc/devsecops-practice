@@ -1,0 +1,110 @@
+# infra/phase17/networkpolicies/allow-app-to-redis.yaml
+# Allow ingress to Redis pods (port 6379) from both SampleApi and NotificationApi pods
+# Both services use Redis: SampleApi for caching, NotificationApi for pub/sub
+# Applied to: sampleapi-dev, sampleapi-sit, sampleapi-uat, sampleapi-prod
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-app-to-redis
+  namespace: sampleapi-dev
+  labels:
+    team: devsecops
+    policy: allow-app-to-redis
+spec:
+  podSelector:
+    matchLabels:
+      app: redis  # Target: Redis pods
+  ingress:
+    - from:
+        # Source: SampleApi pods
+        - podSelector:
+            matchLabels:
+              app: sampleapi
+        # Source: NotificationApi pods
+        - podSelector:
+            matchLabels:
+              app: notificationapi
+      ports:
+        - protocol: TCP
+          port: 6379
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-app-to-redis
+  namespace: sampleapi-sit
+  labels:
+    team: devsecops
+    policy: allow-app-to-redis
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: sampleapi
+        - podSelector:
+            matchLabels:
+              app: notificationapi
+      ports:
+        - protocol: TCP
+          port: 6379
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-app-to-redis
+  namespace: sampleapi-uat
+  labels:
+    team: devsecops
+    policy: allow-app-to-redis
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: sampleapi
+        - podSelector:
+            matchLabels:
+              app: notificationapi
+      ports:
+        - protocol: TCP
+          port: 6379
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-app-to-redis
+  namespace: sampleapi-prod
+  labels:
+    team: devsecops
+    policy: allow-app-to-redis
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: sampleapi
+        - podSelector:
+            matchLabels:
+              app: notificationapi
+      ports:
+        - protocol: TCP
+          port: 6379
+  policyTypes:
+    - Ingress

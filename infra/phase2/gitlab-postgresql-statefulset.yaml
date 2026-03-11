@@ -1,0 +1,97 @@
+# infra/phase2/gitlab-postgresql-statefulset.yaml
+# PostgreSQL 15 for GitLab CE with persistent storage
+# Uses gp3-csi StorageClass (OCP default on AWS)
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: gitlab-postgresql
+  namespace: devsecops-gitlab
+  labels:
+    team: devsecops
+    app: gitlab-postgresql
+    component: database
+spec:
+  serviceName: gitlab-postgresql
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gitlab-postgresql
+  template:
+    metadata:
+      labels:
+        app: gitlab-postgresql
+        team: devsecops
+    spec:
+      containers:
+        - name: postgresql
+          image: registry.redhat.io/rhel9/postgresql-15:latest
+          ports:
+            - containerPort: 5432
+              name: postgresql
+              protocol: TCP
+          env:
+            # PostgreSQL superuser password
+            - name: POSTGRESQL_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: gitlab-db-credentials
+                  key: POSTGRES_PASSWORD
+            # GitLab database
+            - name: POSTGRESQL_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: gitlab-db-credentials
+                  key: GITLAB_DB_NAME
+            - name: POSTGRESQL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: gitlab-db-credentials
+                  key: GITLAB_DB_USER
+            - name: POSTGRESQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: gitlab-db-credentials
+                  key: GITLAB_DB_PASSWORD
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/pgsql/data
+          # Liveness: is PostgreSQL accepting connections?
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pg_isready -U gitlab -d gitlabhq_production
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          # Readiness: can we run a query?
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pg_isready -U gitlab -d gitlabhq_production
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app: gitlab-postgresql
+          team: devsecops
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: gp3-csi
+        resources:
+          requests:
+            storage: 10Gi

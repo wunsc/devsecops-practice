@@ -1,0 +1,76 @@
+# infra/phase24/backup-gitlab-cronjob.yaml
+# CronJob: Daily GitLab backup using gitlab-backup CLI.
+#
+# Creates a GitLab backup tarball containing repositories, database,
+# uploads, and CI artifacts. Stored on the GitLab data PVC.
+#
+# SCHEDULE: Daily at 03:00 UTC
+# RETENTION: Keeps last 7 backups
+#
+# APPLY:
+#   oc apply -f backup-gitlab-cronjob.yaml -n devsecops-gitlab
+#
+# RESTORE:
+#   oc exec -it deploy/gitlab-ce -n devsecops-gitlab -- \
+#     gitlab-backup restore BACKUP=<timestamp>_gitlab_backup
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: gitlab-backup
+  namespace: devsecops-gitlab
+  labels:
+    app: gitlab-backup
+    team: devsecops
+spec:
+  schedule: "0 3 * * *"                          # Daily 03:00 UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 3600                 # 60 minutes max
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: gitlab-backup
+              image: registry.redhat.io/openshift4/ose-cli:v4.20
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  set -e
+                  echo "=== GitLab Backup — $(date) ==="
+
+                  # Execute backup inside the running GitLab pod
+                  GITLAB_POD=$(oc get pods -n devsecops-gitlab -l app=gitlab-ce -o jsonpath='{.items[0].metadata.name}')
+                  echo "GitLab pod: ${GITLAB_POD}"
+
+                  echo "Starting backup..."
+                  oc exec -n devsecops-gitlab ${GITLAB_POD} -- \
+                    gitlab-backup create CRON=1 SKIP=builds,artifacts 2>&1
+
+                  # List backups
+                  echo ""
+                  echo "Available backups:"
+                  oc exec -n devsecops-gitlab ${GITLAB_POD} -- \
+                    ls -lh /var/opt/gitlab/backups/ 2>&1 | tail -10
+
+                  # Rotate — keep last 7
+                  echo ""
+                  echo "Rotating old backups (keeping last 7)..."
+                  oc exec -n devsecops-gitlab ${GITLAB_POD} -- /bin/bash -c \
+                    'ls -1t /var/opt/gitlab/backups/*_gitlab_backup.tar 2>/dev/null | tail -n +8 | xargs rm -f 2>/dev/null || true'
+
+                  echo ""
+                  echo "=== Backup completed — $(date) ==="
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 100m
+                  memory: 128Mi
+          serviceAccountName: jenkins-sa

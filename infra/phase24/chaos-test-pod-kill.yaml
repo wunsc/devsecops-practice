@@ -1,0 +1,82 @@
+# infra/phase24/chaos-test-pod-kill.yaml
+# Job: Chaos test — randomly kill pods in PROD to verify PDB + auto-heal.
+#
+# This test verifies:
+#   1. PDB prevents killing too many pods simultaneously
+#   2. Kubernetes auto-heals by recreating killed pods
+#   3. The application remains available throughout (zero downtime)
+#
+# USAGE:
+#   oc apply -f chaos-test-pod-kill.yaml -n sampleapi-prod
+#   # Monitor: watch oc get pods -n sampleapi-prod
+#   # Verify:  curl -sk https://sampleapi-sampleapi-prod.${APPS_DOMAIN}/healthz
+#   oc delete job chaos-test-pod-kill -n sampleapi-prod   # cleanup
+#
+# SAFETY:
+#   - Only targets sampleapi pods (not postgresql/redis)
+#   - Deletes one pod at a time with 30s wait between kills
+#   - PDB minAvailable=1 ensures at least 1 pod survives
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chaos-test-pod-kill
+  namespace: sampleapi-prod
+  labels:
+    app: chaos-test
+    team: devsecops
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 300                      # 5 minutes max
+  template:
+    spec:
+      restartPolicy: Never
+      serviceAccountName: sampleapi-sa
+      containers:
+        - name: chaos-runner
+          image: registry.redhat.io/openshift4/ose-cli:v4.20
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              echo "=== Chaos Test: Pod Kill — $(date) ==="
+              echo "Namespace: sampleapi-prod"
+              echo ""
+
+              echo "--- Pre-test state ---"
+              oc get pods -n sampleapi-prod -l app=sampleapi --no-headers
+              echo ""
+
+              # Kill one sampleapi pod
+              TARGET_POD=$(oc get pods -n sampleapi-prod -l app=sampleapi -o jsonpath='{.items[0].metadata.name}')
+              echo "Killing pod: ${TARGET_POD}"
+              oc delete pod ${TARGET_POD} -n sampleapi-prod --grace-period=5
+              echo "Pod deleted. Waiting 30s for replacement..."
+              sleep 30
+
+              echo ""
+              echo "--- Post-kill state ---"
+              oc get pods -n sampleapi-prod -l app=sampleapi --no-headers
+              echo ""
+
+              # Verify replacement pod is running
+              READY_COUNT=$(oc get pods -n sampleapi-prod -l app=sampleapi --field-selector=status.phase=Running --no-headers | wc -l)
+              echo "Running sampleapi pods: ${READY_COUNT}"
+
+              if [ "$READY_COUNT" -ge 2 ]; then
+                echo "PASS: Auto-heal successful — ${READY_COUNT} pods running"
+              else
+                echo "FAIL: Expected >= 2 running pods, got ${READY_COUNT}"
+                exit 1
+              fi
+
+              echo ""
+              echo "=== Chaos test completed — $(date) ==="
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi

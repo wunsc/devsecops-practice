@@ -1,0 +1,230 @@
+# infra/phase7/jenkins-deployment.yaml
+# Jenkins controller deployment using the official jenkins/jenkins:lts-jdk21 image
+# JCasC (Configuration as Code) configured via ConfigMap mount
+#
+# KNOWN FIXES:
+#   - Image: jenkins/jenkins:lts-jdk21 (v2.541.x), home=/var/jenkins_home, UID=1000
+#   - publishHTML plugin has unresolvable dependencies on 2.541.x — omitted
+#   - generic-webhook-trigger plugin incompatible — use GitLab plugin triggers
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jenkins
+  namespace: devsecops-tools
+  labels:
+    team: devsecops
+    app: jenkins
+    component: ci
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: jenkins
+  template:
+    metadata:
+      labels:
+        app: jenkins
+        team: devsecops
+    spec:
+      serviceAccountName: jenkins-sa
+      # Init container to fix PVC permissions and install plugins
+      initContainers:
+        - name: fix-permissions
+          image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+          command:
+            - sh
+            - -c
+            - |
+              chown -R 1000:0 /var/jenkins_home
+              chmod -R 775 /var/jenkins_home
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: jenkins-home
+              mountPath: /var/jenkins_home
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+        - name: install-plugins
+          image: jenkins/jenkins:lts-jdk21
+          command:
+            - jenkins-plugin-cli
+            - --plugins
+            # Core plugins
+            - configuration-as-code
+            - job-dsl
+            - workflow-aggregator
+            - pipeline-stage-view
+            - pipeline-utility-steps
+            # Kubernetes agent plugin (ephemeral agent pods)
+            - kubernetes
+            - kubernetes-credentials
+            # Git and SCM
+            - git
+            - git-client
+            # GitLab integration (webhook triggers)
+            - gitlab-plugin
+            # Credentials management
+            - credentials
+            - credentials-binding
+            - plain-credentials
+            # Security
+            - matrix-auth
+            - antisamy-markup-formatter
+            # UI and reporting
+            - blueocean
+            - warnings-ng
+            - junit
+            # Build tools
+            - timestamper
+            - ws-cleanup
+            - ansicolor
+          volumeMounts:
+            - name: jenkins-plugins
+              mountPath: /usr/share/jenkins/ref/plugins
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+      containers:
+        - name: jenkins
+          image: jenkins/jenkins:lts-jdk21
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+            - containerPort: 50000
+              name: agent
+              protocol: TCP
+          env:
+            # JCasC configuration path
+            - name: CASC_JENKINS_CONFIG
+              value: /var/jenkins_home/casc_configs
+            # Disable setup wizard (JCasC handles everything)
+            - name: JAVA_OPTS
+              value: >-
+                -Djenkins.install.runSetupWizard=false
+                -Dhudson.security.csrf.DefaultCrumbIssuer.EXCLUDE_SESSION_ID=true
+                -Xmx1g
+                -Xms512m
+            # Jenkins URL (used for webhook callbacks)
+            - name: JENKINS_URL
+              value: "https://jenkins-devsecops-tools.apps.cluster-pmqwq.pmqwq.sandbox270.opentlc.com"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 3Gi
+          volumeMounts:
+            # Jenkins home directory (persistent)
+            - name: jenkins-home
+              mountPath: /var/jenkins_home
+            # JCasC ConfigMap
+            - name: jenkins-casc
+              mountPath: /var/jenkins_home/casc_configs
+              readOnly: true
+            # Pre-installed plugins
+            - name: jenkins-plugins
+              mountPath: /usr/share/jenkins/ref/plugins
+          startupProbe:
+            httpGet:
+              path: /login
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 30
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /login
+              port: 8080
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /login
+              port: 8080
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: jenkins-home
+          persistentVolumeClaim:
+            claimName: jenkins-home
+        - name: jenkins-casc
+          configMap:
+            name: jenkins-casc-config
+        - name: jenkins-plugins
+          emptyDir: {}
+---
+# PVC for Jenkins home directory
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jenkins-home
+  namespace: devsecops-tools
+  labels:
+    team: devsecops
+    app: jenkins
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: gp3-csi
+  resources:
+    requests:
+      storage: 20Gi
+---
+# Jenkins HTTP service
+apiVersion: v1
+kind: Service
+metadata:
+  name: jenkins
+  namespace: devsecops-tools
+  labels:
+    team: devsecops
+    app: jenkins
+spec:
+  type: ClusterIP
+  selector:
+    app: jenkins
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+    - name: agent
+      port: 50000
+      targetPort: 50000
+      protocol: TCP
+---
+# Jenkins Route (TLS edge)
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: jenkins
+  namespace: devsecops-tools
+  labels:
+    team: devsecops
+    app: jenkins
+spec:
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  to:
+    kind: Service
+    name: jenkins
+    weight: 100
+  port:
+    targetPort: http

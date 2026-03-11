@@ -1,0 +1,20 @@
+# infra/phase3/sonarqube-service.yaml
+# ClusterIP service for SonarQube web UI and API
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sonarqube
+  namespace: devsecops-tools
+  labels:
+    team: devsecops
+    app: sonarqube
+spec:
+  type: ClusterIP
+  selector:
+    app: sonarqube
+  ports:
+    - name: http
+      port: 9000
+      targetPort: 9000
+      protocol: TCP

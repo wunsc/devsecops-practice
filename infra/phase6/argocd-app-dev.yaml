@@ -1,0 +1,42 @@
+# infra/phase6/argocd-app-dev.yaml
+# ArgoCD Application for DEV environment
+# syncPolicy: automated — auto-syncs when app-gitops/overlays/dev changes
+# This is triggered by T2 (merge to main) pipeline updating the image tag
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sampleapi-dev
+  namespace: openshift-gitops
+  labels:
+    team: devsecops
+    app: sampleapi
+    environment: dev
+spec:
+  project: devsecops
+
+  source:
+    repoURL: "https://gitlab-devsecops-gitlab.apps.cluster-pmqwq.pmqwq.sandbox270.opentlc.com/devsecops/app-gitops.git"
+    targetRevision: main
+    path: overlays/dev
+
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: sampleapi-dev
+
+  # Auto-sync for DEV — changes in GitOps repo deploy automatically
+  syncPolicy:
+    automated:
+      prune: true       # Delete resources removed from Git
+      selfHeal: true    # Revert manual changes to match Git
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=false  # Namespace created in Phase 1
+      - PruneLast=true         # Prune after sync (safer ordering)
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 1m

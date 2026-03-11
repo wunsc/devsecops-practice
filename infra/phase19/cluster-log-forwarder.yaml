@@ -1,0 +1,110 @@
+# infra/phase19/cluster-log-forwarder.yaml
+# ClusterLogForwarder — controls what logs to collect, how to transform,
+# and where to send them.
+#
+# API VERSION: observability.openshift.io/v1 (Logging 6.x)
+#   This is the NEW API. Phase 14 used logging.openshift.io/v1 (old API).
+#   The old API is deprecated in Logging 6.x.
+#
+# DESIGN:
+#   - 3 pipelines: application, infrastructure, audit
+#   - All output to LokiStack (logging-loki) in openshift-logging
+#   - Application logs are parsed as JSON (structured .NET logs)
+#   - Drop DEBUG-level logs from production namespaces (volume reduction)
+#   - Infrastructure and audit logs forwarded without filtering
+#
+# The collector (Vector) runs as a DaemonSet — one pod per node.
+# It reads from /var/log/pods/* and /var/log/audit/* on each node.
+#
+# PREREQUISITE:
+#   - LokiStack "logging-loki" in Ready state
+#   - ServiceAccount "logcollector" with required ClusterRoleBindings
+#
+# APPLY:
+#   oc apply -f cluster-log-forwarder.yaml
+#
+# VERIFY:
+#   oc get clusterlogforwarder instance -n openshift-logging
+#   # Expected: CONDITIONS show Ready=True
+#
+#   oc get pods -n openshift-logging -l component=collector
+#   # Expected: 6 pods Running (one per node)
+#
+#   oc logs -l component=collector -n openshift-logging --tail=5
+#   # Expected: no errors, shows "Vector has started" or similar
+---
+apiVersion: observability.openshift.io/v1
+kind: ClusterLogForwarder
+metadata:
+  name: instance
+  namespace: openshift-logging
+spec:
+  # --- Collector ServiceAccount ---
+  # Vector DaemonSet runs under this SA (must have collect-* ClusterRoles)
+  serviceAccount:
+    name: logcollector
+
+  # --- Outputs: Where logs are sent ---
+  outputs:
+    - name: loki-output
+      type: lokiStack
+      lokiStack:
+        target:
+          name: logging-loki                   # LokiStack CR name
+          namespace: openshift-logging
+        authentication:
+          token:
+            from: serviceAccount               # Use logcollector SA token for auth
+      tls:
+        ca:
+          configMapName: openshift-service-ca.crt
+          key: service-ca.crt                  # Trust service-serving-signer CA for LokiStack gateway TLS
+
+  # --- Pipelines: Route log types to outputs ---
+  pipelines:
+    # Application logs: container stdout/stderr from user namespaces
+    # Includes sampleapi-*, devsecops-tools, devsecops-gitlab
+    - name: app-logs
+      inputRefs:
+        - application                          # Built-in: all non-infra namespace pods
+      outputRefs:
+        - loki-output
+      filterRefs:
+        - drop-debug-prod                      # Drop DEBUG logs from production
+        - parse-json                           # Parse .NET structured JSON logs
+
+    # Infrastructure logs: openshift-*, kube-*, default namespace components
+    - name: infra-logs
+      inputRefs:
+        - infrastructure                       # Built-in: control plane + infra pods
+      outputRefs:
+        - loki-output
+
+    # Audit logs: API server, OAuth server, node-level audit
+    - name: audit-logs
+      inputRefs:
+        - audit                                # Built-in: /var/log/audit/*
+      outputRefs:
+        - loki-output
+
+  # --- Filters: Transform and reduce log volume ---
+  filters:
+    # Drop DEBUG-level logs from production namespaces
+    # Production should only log Info/Warning/Error (set in ConfigMap).
+    # This filter catches any DEBUG logs that slip through (e.g., during config changes).
+    - name: drop-debug-prod
+      type: drop
+      drop:
+        - test:
+            - field: .kubernetes.namespace_name
+              matches: "sampleapi-prod"
+            - field: .level
+              matches: "debug|Debug|DEBUG"
+
+    # Parse JSON-structured log messages from .NET applications
+    # .NET logs output structured JSON when configured with:
+    #   builder.Logging.AddJsonConsole()
+    # This filter extracts JSON fields (level, message, exception, etc.)
+    # into top-level log fields for easier LogQL querying.
+    - name: parse-json
+      type: parse

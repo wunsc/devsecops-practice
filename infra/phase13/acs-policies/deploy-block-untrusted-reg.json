@@ -1,0 +1,77 @@
+{
+  "_comment": "infra/phase13/acs-policies/deploy-block-untrusted-reg.json",
+  "_comment2": "ACS Deploy-time policy: only allow images from trusted registries",
+  "_comment3": "Trusted: OCP internal registry, Red Hat registries, Microsoft .NET registries",
+  "policies": [
+    {
+      "name": "DevSecOps - Block Untrusted Registries (Deploy)",
+      "description": "Only allows container images from explicitly trusted registries. Images from Docker Hub, unknown registries, or unverified sources are blocked at deploy time.",
+      "rationale": "Using images from untrusted registries introduces supply chain risk. Only images built by our CI pipeline (internal registry) or from verified vendors (Red Hat, Microsoft) should be deployed.",
+      "remediation": "Use images from the OCP internal registry (image-registry.openshift-image-registry.svc:5000), Red Hat (registry.redhat.io, registry.access.redhat.com), or Microsoft (mcr.microsoft.com). Build your image using the CI pipeline which pushes to the internal registry.",
+      "categories": [
+        "Supply Chain Security"
+      ],
+      "lifecycleStages": [
+        "DEPLOY"
+      ],
+      "severity": "HIGH_SEVERITY",
+      "enforcementActions": [
+        "SCALE_TO_ZERO_ENFORCEMENT"
+      ],
+      "policySections": [
+        {
+          "sectionName": "Untrusted Image Registry",
+          "policyGroups": [
+            {
+              "fieldName": "Image Registry",
+              "booleanOperator": "AND",
+              "negate": true,
+              "values": [
+                {
+                  "value": "image-registry.openshift-image-registry.svc:5000"
+                },
+                {
+                  "value": "registry.redhat.io"
+                },
+                {
+                  "value": "registry.access.redhat.com"
+                },
+                {
+                  "value": "mcr.microsoft.com"
+                },
+                {
+                  "value": "quay.io"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "scope": [
+        {
+          "cluster": null,
+          "namespace": "sampleapi-dev",
+          "label": null
+        },
+        {
+          "cluster": null,
+          "namespace": "sampleapi-sit",
+          "label": null
+        },
+        {
+          "cluster": null,
+          "namespace": "sampleapi-uat",
+          "label": null
+        },
+        {
+          "cluster": null,
+          "namespace": "sampleapi-prod",
+          "label": null
+        }
+      ],
+      "exclusions": [],
+      "disabled": false,
+      "isDefault": false
+    }
+  ]
+}

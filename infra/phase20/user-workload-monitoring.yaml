@@ -1,0 +1,84 @@
+# infra/phase20/user-workload-monitoring.yaml
+# Enables Prometheus user workload monitoring on OpenShift.
+#
+# By default, OCP only monitors platform components (openshift-* namespaces).
+# This ConfigMap enables monitoring for user namespaces (sampleapi-dev/sit/uat/prod).
+#
+# Once enabled, OCP deploys:
+#   - prometheus-user-workload pods in openshift-user-workload-monitoring
+#   - thanos-ruler-user-workload pods for alerting rule evaluation
+#   These pick up ServiceMonitor, PodMonitor, and PrometheusRule CRDs from user namespaces.
+#
+# NOTE: This replaces the Phase 14 placeholder (infra/phase14/user-workload-monitoring.yaml)
+#       with production-grade settings.
+#
+# APPLY (cluster-admin required):
+#   oc apply -f user-workload-monitoring.yaml
+#
+# VERIFY:
+#   oc get pods -n openshift-user-workload-monitoring
+#   # Expected: prometheus-user-workload-0, thanos-ruler-user-workload-0 Running
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-monitoring-config
+  namespace: openshift-monitoring
+data:
+  config.yaml: |
+    # Enable user workload monitoring
+    enableUserWorkload: true
+
+    # Platform Prometheus retention and resources
+    prometheusK8s:
+      retention: 15d
+      resources:
+        requests:
+          cpu: 200m
+          memory: 1Gi
+        limits:
+          cpu: "2"
+          memory: 4Gi
+      # Persistent storage for platform Prometheus (survives pod restarts)
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3-csi
+          resources:
+            requests:
+              storage: 40Gi
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: user-workload-monitoring-config
+  namespace: openshift-user-workload-monitoring
+data:
+  config.yaml: |
+    # User workload Prometheus
+    prometheus:
+      retention: 15d
+      resources:
+        requests:
+          cpu: 100m
+          memory: 512Mi
+        limits:
+          cpu: "1"
+          memory: 2Gi
+      # Persistent storage for user workload Prometheus
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3-csi
+          resources:
+            requests:
+              storage: 20Gi
+
+    # Thanos Ruler evaluates PrometheusRule CRDs from user namespaces
+    thanosRuler:
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          cpu: 200m
+          memory: 512Mi

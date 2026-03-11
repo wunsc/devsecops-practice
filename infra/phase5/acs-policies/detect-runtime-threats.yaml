@@ -1,0 +1,92 @@
+# infra/phase5/acs-policies/detect-runtime-threats.yaml
+# Runtime policy: Detect anomalous runtime behavior in application pods
+# Monitors for: shell spawning, crypto mining, reverse shells, unauthorized processes
+# Does NOT block — alerts only (runtime enforcement can be disruptive)
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: acs-policy-detect-runtime-threats
+  namespace: stackrox
+  labels:
+    team: devsecops
+    acs-policy: "true"
+    policy-lifecycle: runtime
+  annotations:
+    description: |
+      Detect anomalous runtime behavior in application namespaces.
+      Alert-only mode — generates violations for investigation.
+      Covers: unexpected shell execution, crypto mining processes,
+      network connections to known-bad destinations.
+data:
+  # Shell execution detection
+  policy-shell.json: |
+    {
+      "name": "Detect Shell Execution in App Containers",
+      "description": "Alert when a shell process (bash, sh, csh, zsh) is spawned inside application containers. Application containers should not need interactive shells.",
+      "rationale": "Shell execution in a running container may indicate an attacker has gained access and is performing reconnaissance or lateral movement.",
+      "remediation": "Investigate the pod for compromise. Check container logs, network connections, and running processes. If unauthorized, terminate the pod and rotate credentials.",
+      "categories": ["Anomalous Activity"],
+      "lifecycleStages": ["RUNTIME"],
+      "severity": "HIGH_SEVERITY",
+      "enforcementActions": [],
+      "disabled": false,
+      "eventSource": "DEPLOYMENT_EVENT",
+      "policySections": [
+        {
+          "sectionName": "Shell Process Detection",
+          "policyGroups": [
+            {
+              "fieldName": "Process Name",
+              "values": [
+                { "value": "bash" },
+                { "value": "sh" },
+                { "value": "csh" },
+                { "value": "zsh" },
+                { "value": "dash" }
+              ]
+            }
+          ]
+        }
+      ],
+      "scope": [
+        { "cluster": "", "namespace": "sampleapi-dev" },
+        { "cluster": "", "namespace": "sampleapi-sit" },
+        { "cluster": "", "namespace": "sampleapi-uat" },
+        { "cluster": "", "namespace": "sampleapi-prod" }
+      ],
+      "exclusions": []
+    }
+  # Crypto mining detection
+  policy-cryptominer.json: |
+    {
+      "name": "Detect Crypto Mining Processes",
+      "description": "Alert when known cryptocurrency mining processes are detected in containers.",
+      "rationale": "Crypto mining in containers indicates either a supply chain compromise or unauthorized access. It consumes resources and may indicate a broader breach.",
+      "remediation": "Terminate the pod immediately. Investigate the image for embedded miners. Scan the image with ACS and rebuild from a clean base.",
+      "categories": ["Cryptocurrency Mining"],
+      "lifecycleStages": ["RUNTIME"],
+      "severity": "CRITICAL_SEVERITY",
+      "enforcementActions": ["KILL_POD_ENFORCEMENT"],
+      "disabled": false,
+      "eventSource": "DEPLOYMENT_EVENT",
+      "policySections": [
+        {
+          "sectionName": "Crypto Miner Processes",
+          "policyGroups": [
+            {
+              "fieldName": "Process Name",
+              "values": [
+                { "value": "xmrig" },
+                { "value": "minerd" },
+                { "value": "cpuminer" },
+                { "value": "stratum" },
+                { "value": "cryptonight" }
+              ]
+            }
+          ]
+        }
+      ],
+      "scope": [],
+      "exclusions": []
+    }

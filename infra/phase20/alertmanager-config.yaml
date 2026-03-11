@@ -1,0 +1,138 @@
+# infra/phase20/alertmanager-config.yaml
+# AlertmanagerConfig — routes fired alerts to notification channels.
+#
+# OpenShift uses AlertmanagerConfig (monitoring.coreos.com/v1beta1) CRDs
+# in user namespaces. Each namespace can define its own routing tree.
+#
+# ROUTING DESIGN:
+#   critical → Slack #devsecops-critical (immediate)
+#   warning  → Slack #devsecops-alerts   (5-minute group wait)
+#   info     → Slack #devsecops-info     (30-minute group wait)
+#
+# For email: uncomment the emailConfigs sections and configure SMTP
+# in alertmanager-secret.yaml.
+#
+# PREREQUISITE:
+#   - Slack webhook URL stored in alertmanager-secret.yaml
+#   - Secret applied to the namespace before this AlertmanagerConfig
+#
+# DEPLOY TO: Each app namespace (DEV gets all severities, PROD gets critical+warning).
+#   oc apply -f alertmanager-secret.yaml -n sampleapi-dev
+#   oc apply -f alertmanager-config.yaml -n sampleapi-dev
+---
+apiVersion: monitoring.coreos.com/v1beta1
+kind: AlertmanagerConfig
+metadata:
+  name: devsecops-alerts
+  labels:
+    app: sampleapi
+    team: devsecops
+spec:
+  # --- Route tree ---
+  route:
+    # Default receiver for unmatched alerts
+    receiver: slack-warning
+    # Group alerts by these labels — reduces notification noise
+    groupBy:
+      - alertname
+      - namespace
+      - service
+    # Wait this long before sending the first notification for a group
+    groupWait: 30s
+    # Wait this long before sending a new notification for the same group
+    groupInterval: 5m
+    # Wait this long before resending a notification
+    repeatInterval: 4h
+
+    # Route by severity
+    routes:
+      # Critical alerts → immediate notification
+      - matchers:
+          - name: severity
+            value: critical
+            matchType: "="
+        receiver: slack-critical
+        groupWait: 10s
+        repeatInterval: 1h
+        continue: false
+
+      # Warning alerts → 5-minute batch
+      - matchers:
+          - name: severity
+            value: warning
+            matchType: "="
+        receiver: slack-warning
+        groupWait: 5m
+        repeatInterval: 4h
+        continue: false
+
+      # Info alerts → 30-minute batch
+      - matchers:
+          - name: severity
+            value: info
+            matchType: "="
+        receiver: slack-info
+        groupWait: 30m
+        repeatInterval: 12h
+        continue: false
+
+  # --- Receivers ---
+  receivers:
+    # Critical: immediate attention required
+    - name: slack-critical
+      slackConfigs:
+        - apiURL:
+            name: alertmanager-slack-webhook       # Secret name
+            key: critical-webhook-url              # Key in secret
+          channel: "#devsecops-critical"
+          title: |
+            [{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}
+          text: |
+            *Namespace:* {{ .CommonLabels.namespace }}
+            *Service:* {{ .CommonLabels.service }}
+            *Description:* {{ .CommonAnnotations.description }}
+            *Runbook:* {{ .CommonAnnotations.runbook_url }}
+          sendResolved: true
+
+    # Warning: investigate within 1 hour
+    - name: slack-warning
+      slackConfigs:
+        - apiURL:
+            name: alertmanager-slack-webhook
+            key: warning-webhook-url
+          channel: "#devsecops-alerts"
+          title: |
+            [{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}
+          text: |
+            *Namespace:* {{ .CommonLabels.namespace }}
+            *Service:* {{ .CommonLabels.service }}
+            *Description:* {{ .CommonAnnotations.description }}
+          sendResolved: true
+
+    # Info: low priority, review during business hours
+    - name: slack-info
+      slackConfigs:
+        - apiURL:
+            name: alertmanager-slack-webhook
+            key: info-webhook-url
+          channel: "#devsecops-info"
+          title: |
+            [INFO] {{ .CommonLabels.alertname }}
+          text: |
+            *Namespace:* {{ .CommonLabels.namespace }}
+            {{ .CommonAnnotations.description }}
+          sendResolved: false
+
+    # Email example (uncomment to enable):
+    # - name: email-oncall
+    #   emailConfigs:
+    #     - to: "devsecops-oncall@company.com"
+    #       from: "alertmanager@company.com"
+    #       smarthost: "smtp.company.com:587"
+    #       authUsername:
+    #         name: alertmanager-smtp-credentials
+    #         key: username
+    #       authPassword:
+    #         name: alertmanager-smtp-credentials
+    #         key: password
+    #       requireTLS: true

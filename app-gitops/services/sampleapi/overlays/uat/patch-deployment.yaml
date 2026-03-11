@@ -1,0 +1,20 @@
+# app-gitops/overlays/uat/patch-sampleapi.yaml
+# UAT-specific: 2 replicas, moderate resources
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sampleapi
+spec:
+  replicas: 2
+  template:
+    spec:
+      containers:
+        - name: sampleapi
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi

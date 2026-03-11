@@ -1,0 +1,130 @@
+# infra/phase14/cluster-log-forwarder.yaml
+# OpenShift Logging — ClusterLogForwarder configuration
+#
+# Routes application logs from sampleapi namespaces to the default log store
+# (Loki or Elasticsearch, depending on what's deployed).
+#
+# PREREQUISITES:
+#   - OpenShift Logging operator installed (Red Hat OpenShift Logging)
+#   - ClusterLogging instance created in openshift-logging namespace
+#   - Vector or Fluentd collector deployed
+#
+# APPLY:
+#   oc apply -f cluster-log-forwarder.yaml -n openshift-logging
+#
+# VERIFY:
+#   oc get clusterlogforwarder instance -n openshift-logging
+#   oc logs -l component=collector -n openshift-logging --tail=20
+---
+apiVersion: logging.openshift.io/v1
+kind: ClusterLogForwarder
+metadata:
+  name: instance
+  namespace: openshift-logging
+spec:
+  # --- Inputs: Define which logs to collect ---
+  inputs:
+    # Application logs from all sampleapi namespaces
+    - name: sampleapi-app-logs
+      application:
+        namespaces:
+          - sampleapi-dev
+          - sampleapi-sit
+          - sampleapi-uat
+          - sampleapi-prod
+
+    # Infrastructure logs from DevSecOps tools
+    - name: devsecops-tools-logs
+      application:
+        namespaces:
+          - devsecops-tools
+          - devsecops-gitlab
+
+  # --- Outputs: Where to send logs ---
+  outputs:
+    # Default OpenShift log store (Loki or Elasticsearch)
+    - name: default-logstore
+      type: default
+
+  # --- Pipelines: Route inputs to outputs with filtering ---
+  pipelines:
+    # Application logs → default log store
+    - name: sampleapi-pipeline
+      inputRefs:
+        - sampleapi-app-logs
+      outputRefs:
+        - default-logstore
+      labels:
+        app: sampleapi
+        team: devsecops
+      # Parse structured JSON logs from .NET applications
+      parse: json
+      # Detect multiline log entries (stack traces)
+      detectMultilineErrors: true
+
+    # DevSecOps tools logs → default log store
+    - name: devsecops-tools-pipeline
+      inputRefs:
+        - devsecops-tools-logs
+      outputRefs:
+        - default-logstore
+      labels:
+        team: devsecops
+        component: tools
+
+    # Infrastructure logs (nodes, control plane)
+    - name: infra-pipeline
+      inputRefs:
+        - infrastructure
+      outputRefs:
+        - default-logstore
+
+    # Audit logs (API server, OAuth, node)
+    - name: audit-pipeline
+      inputRefs:
+        - audit
+      outputRefs:
+        - default-logstore
+
+---
+# Optional: ClusterLogging instance (if not already created)
+# This defines the logging stack (collector + store)
+apiVersion: logging.openshift.io/v1
+kind: ClusterLogging
+metadata:
+  name: instance
+  namespace: openshift-logging
+spec:
+  managementState: Managed
+
+  # Log collector — Vector is recommended (Fluentd is deprecated)
+  collection:
+    type: vector
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+
+  # Log store — LokiStack is recommended for OCP 4.14+
+  # If using Elasticsearch, replace with:
+  #   logStore:
+  #     type: elasticsearch
+  #     elasticsearch:
+  #       nodeCount: 3
+  #       storage:
+  #         storageClassName: gp3-csi
+  #         size: 50Gi
+  logStore:
+    type: lokistack
+    lokistack:
+      name: logging-loki
+    retentionPolicy:
+      application:
+        maxAge: 7d
+      infrastructure:
+        maxAge: 7d
+      audit:
+        maxAge: 30d

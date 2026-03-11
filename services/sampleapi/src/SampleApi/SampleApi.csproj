@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Assembly info for SonarQube and vulnerability scanning -->
+    <AssemblyName>SampleApi</AssemblyName>
+    <RootNamespace>SampleApi</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Health check library -->
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="8.0.0" />
+    <!-- Swagger/OpenAPI -->
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+    <!-- PostgreSQL via EF Core (Phase 17 — data persistence) -->
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.4" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.4">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <!-- Redis distributed cache (Phase 17 — caching layer) -->
+    <PackageReference Include="StackExchange.Redis" Version="2.7.27" />
+    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="8.0.4" />
+    <!-- HttpClient factory for NotificationApi calls (Phase 17 — service-to-service) -->
+    <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.0" />
+    <!-- EF Core InMemory provider — fallback when DATABASE_URL is not configured -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.4" />
+    <!-- Health check extensions for PostgreSQL and Redis (Phase 17) -->
+    <PackageReference Include="AspNetCore.HealthChecks.NpgSql" Version="8.0.2" />
+    <PackageReference Include="AspNetCore.HealthChecks.Redis" Version="8.0.1" />
+    <!-- Prometheus metrics (Phase 20 — monitoring & alerting) -->
+    <PackageReference Include="prometheus-net.AspNetCore" Version="8.2.1" />
+    <!-- OpenTelemetry distributed tracing (Phase 22) -->
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.9.0" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.9.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.9.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.9.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.EntityFrameworkCore" Version="1.0.0-beta.12" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.StackExchangeRedis" Version="1.9.0-beta.1" />
+  </ItemGroup>
+
+</Project>

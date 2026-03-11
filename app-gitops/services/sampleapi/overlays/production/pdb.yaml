@@ -1,0 +1,15 @@
+# app-gitops/overlays/production/pdb-sampleapi.yaml
+# PDB for SampleAPI — ensures at least 1 pod is always available
+# during voluntary disruptions (node drain, rolling updates, cluster upgrades)
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: sampleapi-pdb
+  labels:
+    app: sampleapi
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: sampleapi

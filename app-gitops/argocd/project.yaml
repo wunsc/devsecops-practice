@@ -1,0 +1,44 @@
+# app-gitops/argocd/project.yaml
+# ArgoCD AppProject — same as Phase 6 but stored in the GitOps repo
+# for App-of-Apps pattern self-management
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: devsecops
+  namespace: openshift-gitops
+  labels:
+    team: devsecops
+spec:
+  description: "DevSecOps project — SampleAPI across DEV/SIT/UAT/PROD"
+  sourceRepos:
+    - "https://gitlab-devsecops-gitlab.apps.cluster-pmqwq.pmqwq.sandbox270.opentlc.com/devsecops/app-gitops.git"
+  destinations:
+    - server: "https://kubernetes.default.svc"
+      namespace: sampleapi-dev
+    - server: "https://kubernetes.default.svc"
+      namespace: sampleapi-sit
+    - server: "https://kubernetes.default.svc"
+      namespace: sampleapi-uat
+    - server: "https://kubernetes.default.svc"
+      namespace: sampleapi-prod
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+    - group: ""
+      kind: ConfigMap
+    - group: ""
+      kind: Secret
+    - group: ""
+      kind: Service
+    - group: ""
+      kind: ServiceAccount
+    - group: apps
+      kind: Deployment
+    - group: apps
+      kind: StatefulSet
+    - group: route.openshift.io
+      kind: Route
+    - group: policy
+      kind: PodDisruptionBudget
+  orphanedResources:
+    warn: true

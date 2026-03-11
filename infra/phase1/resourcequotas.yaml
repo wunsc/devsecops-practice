@@ -1,0 +1,101 @@
+# infra/phase1/resourcequotas.yaml
+# Per-namespace resource quotas to prevent resource exhaustion
+# Quotas: tools = 16 CPU/32Gi (increased for ZAP sidecar + concurrent builds),
+# gitlab = 8 CPU/16Gi, dev = 6 CPU/12Gi, sit/uat = 8 CPU/16Gi, prod = 12 CPU/24Gi
+# Multi-service: sampleapi + notificationapi + postgresql + redis per namespace
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: devsecops-tools-quota
+  namespace: devsecops-tools
+  labels:
+    team: devsecops
+spec:
+  hard:
+    requests.cpu: "8"
+    requests.memory: 16Gi
+    limits.cpu: "16"
+    limits.memory: 32Gi
+    pods: "20"
+    persistentvolumeclaims: "10"
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: devsecops-gitlab-quota
+  namespace: devsecops-gitlab
+  labels:
+    team: devsecops
+spec:
+  hard:
+    requests.cpu: "4"
+    requests.memory: 8Gi
+    limits.cpu: "8"
+    limits.memory: 16Gi
+    pods: "10"
+    persistentvolumeclaims: "5"
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: sampleapi-dev-quota
+  namespace: sampleapi-dev
+  labels:
+    team: devsecops
+spec:
+  hard:
+    requests.cpu: "3"
+    requests.memory: 6Gi
+    limits.cpu: "6"
+    limits.memory: 12Gi
+    pods: "15"
+    persistentvolumeclaims: "5"
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: sampleapi-sit-quota
+  namespace: sampleapi-sit
+  labels:
+    team: devsecops
+spec:
+  hard:
+    requests.cpu: "4"
+    requests.memory: 8Gi
+    limits.cpu: "8"
+    limits.memory: 16Gi
+    pods: "15"
+    persistentvolumeclaims: "5"
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: sampleapi-uat-quota
+  namespace: sampleapi-uat
+  labels:
+    team: devsecops
+spec:
+  hard:
+    requests.cpu: "4"
+    requests.memory: 8Gi
+    limits.cpu: "8"
+    limits.memory: 16Gi
+    pods: "15"
+    persistentvolumeclaims: "5"
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: sampleapi-prod-quota
+  namespace: sampleapi-prod
+  labels:
+    team: devsecops
+spec:
+  hard:
+    requests.cpu: "6"
+    requests.memory: 12Gi
+    limits.cpu: "12"
+    limits.memory: 24Gi
+    pods: "25"
+    persistentvolumeclaims: "10"

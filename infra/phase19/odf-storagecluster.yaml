@@ -1,0 +1,65 @@
+# infra/phase19/odf-storagecluster.yaml
+# ODF StorageCluster CR — deploys Ceph and NooBaa on the cluster.
+#
+# This creates the full ODF stack. For our purposes, we primarily need NooBaa
+# (S3-compatible object storage) for Loki and Tempo backends.
+#
+# SIZING NOTE:
+#   - "lean" mode (monResourceProfile) reduces Ceph resource usage for lab/dev clusters
+#   - For production: remove monResourceProfile, increase storage to 2Ti+
+#   - AWS: uses gp3-csi for Ceph OSD volumes automatically
+#
+# PREREQUISITE:
+#   - ODF Operator installed and CSV in Succeeded state
+#   - At least 3 worker nodes available
+#
+# APPLY:
+#   oc apply -f odf-storagecluster.yaml
+#
+# VERIFY (takes 5-10 minutes):
+#   oc get storagecluster -n openshift-storage
+#   # Expected: ocs-storagecluster Phase=Ready
+#
+#   oc get noobaa -n openshift-storage
+#   # Expected: noobaa Phase=Ready
+#
+#   oc get storageclass | grep noobaa
+#   # Expected: openshift-storage.noobaa.io storageclass exists
+---
+apiVersion: ocs.openshift.io/v1
+kind: StorageCluster
+metadata:
+  name: ocs-storagecluster
+  namespace: openshift-storage
+spec:
+  # Lean profile reduces Ceph MON resource requests for smaller clusters
+  monResourceProfile: lean
+
+  # Storage devices for Ceph OSDs
+  # On AWS, this creates gp3 EBS volumes attached to worker nodes
+  storageDeviceSets:
+    - name: ocs-deviceset-gp3-csi
+      count: 1                                 # 1 OSD per node (3 total across 3 nodes)
+      dataPVCTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 512Gi                   # Per-OSD volume size (lab: 512Gi, prod: 2Ti+)
+          storageClassName: gp3-csi
+          volumeMode: Block
+      placement: {}
+      portable: true
+      replica: 3                               # 3-way replication across nodes
+
+  # Enable NooBaa for S3-compatible object storage
+  multiCloudGateway:
+    reconcileStrategy: standalone              # NooBaa runs independently of Ceph
+
+  # Enable monitoring integration
+  monitoringSpec: {}
+
+  # Network configuration (use default OCP SDN)
+  network:
+    provider: ""

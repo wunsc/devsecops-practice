@@ -1,0 +1,99 @@
+# infra/phase19/lokistack.yaml
+# LokiStack CR — deploys Loki for centralized log storage and querying.
+#
+# LokiStack manages:
+#   - Distributor: receives log streams from Vector collectors
+#   - Ingester: writes logs to S3 storage (via OBC)
+#   - Querier: processes LogQL queries
+#   - Query Frontend: caches and splits queries
+#   - Compactor: compacts and deduplicates stored logs
+#   - Index Gateway: serves index queries
+#
+# SIZING:
+#   - 1x.demo:  All-in-one pod, no replication — for lab/dev only
+#   - 1x.small: Separate components, 1 replica each — small production
+#   - 1x.medium: Multiple replicas per component — medium production
+#
+# TENANT MODE:
+#   "openshift-logging" enables multi-tenant mode with 3 built-in tenants:
+#   - application:    container logs from user namespaces
+#   - infrastructure: logs from openshift-*, kube-* namespaces
+#   - audit:          API server audit logs
+#   OCP Console Observe→Logs uses these tenants for RBAC-filtered log access.
+#
+# PREREQUISITE:
+#   - Loki Operator installed (CSV in Succeeded state)
+#   - OBC "loki-bucket" bound (Secret + ConfigMap created by ODF)
+#
+# APPLY:
+#   oc apply -f lokistack.yaml
+#
+# VERIFY (takes 2-5 minutes):
+#   oc get lokistack logging-loki -n openshift-logging
+#   # Expected: READY=True (or STATUS=Ready)
+#
+#   oc get pods -n openshift-logging -l app.kubernetes.io/instance=logging-loki
+#   # Expected: distributor, ingester, querier, query-frontend, compactor, etc. Running
+---
+apiVersion: loki.grafana.com/v1
+kind: LokiStack
+metadata:
+  name: logging-loki
+  namespace: openshift-logging
+spec:
+  # --- Deployment size ---
+  # 1x.demo for lab (single pod, minimal resources)
+  # Change to 1x.small or 1x.medium for production
+  size: 1x.demo
+
+  # --- S3 storage backend ---
+  storage:
+    schemas:
+      - effectiveDate: "2024-01-01"
+        version: v13                           # Latest schema version for Loki 3.x
+    secret:
+      name: logging-loki-s3                     # Formatted from OBC secret (access_key_id, access_key_secret, bucketnames, endpoint)
+      type: s3                                 # NooBaa provides S3-compatible API
+    tls:
+      caName: loki-ca-bundle                   # ConfigMap with service-ca.crt (trusts NooBaa S3 self-signed cert)
+
+  # --- PVC storage class for WAL and index ---
+  # Loki writes a Write-Ahead Log (WAL) locally before flushing to S3.
+  # This storageClassName is for the PVCs that hold WAL + index data.
+  storageClassName: gp3-csi
+
+  # --- Multi-tenant mode for OpenShift ---
+  tenants:
+    mode: openshift-logging                    # 3 tenants: application, infrastructure, audit
+    # OpenShift RBAC controls which users can see which tenant's logs:
+    #   - cluster-admin: sees all 3 tenants
+    #   - namespace admin: sees application tenant (filtered to their namespaces)
+    #   - No one can see audit logs unless explicitly granted
+
+  # --- Retention policy ---
+  # How long to keep logs before automatic deletion
+  limits:
+    global:
+      retention:
+        days: 7                                # Default: keep logs for 7 days
+    tenants:
+      application:
+        retention:
+          days: 14                             # App logs: keep 14 days (more useful for debugging)
+      infrastructure:
+        retention:
+          days: 7                              # Infra logs: 7 days is sufficient
+      audit:
+        retention:
+          days: 30                             # Audit logs: 30 days for compliance
+
+  # --- Resource limits (1x.demo uses minimal resources) ---
+  # For production (1x.small+), the operator sets appropriate defaults.
+  # Override only if needed:
+  # template:
+  #   distributor:
+  #     replicas: 2
+  #   ingester:
+  #     replicas: 2
+  #   querier:
+  #     replicas: 2

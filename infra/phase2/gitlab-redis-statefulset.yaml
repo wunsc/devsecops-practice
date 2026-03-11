@@ -1,0 +1,84 @@
+# infra/phase2/gitlab-redis-statefulset.yaml
+# Redis 7 for GitLab CE session/cache storage with persistent data
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: gitlab-redis
+  namespace: devsecops-gitlab
+  labels:
+    team: devsecops
+    app: gitlab-redis
+    component: cache
+spec:
+  serviceName: gitlab-redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gitlab-redis
+  template:
+    metadata:
+      labels:
+        app: gitlab-redis
+        team: devsecops
+    spec:
+      containers:
+        - name: redis
+          image: docker.io/library/redis:7-alpine
+          ports:
+            - containerPort: 6379
+              name: redis
+              protocol: TCP
+          # Redis with password authentication and AOF persistence
+          command:
+            - redis-server
+            - --requirepass
+            - $(REDIS_PASSWORD)
+            - --appendonly
+            - "yes"
+            - --appendfsync
+            - everysec
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: gitlab-redis-credentials
+                  key: REDIS_PASSWORD
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          livenessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app: gitlab-redis
+          team: devsecops
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: gp3-csi
+        resources:
+          requests:
+            storage: 5Gi

@@ -1,0 +1,236 @@
+# infra/phase22/grafana-dashboard-traces.yaml
+# GrafanaDashboard CRD — Distributed Tracing Explorer dashboard.
+#
+# This dashboard provides:
+#   - Service map showing SampleApi → NotificationApi → Redis/PostgreSQL
+#   - Trace search by service, operation, duration, status
+#   - Span waterfall view (drilldown from table)
+#   - Request latency breakdown by downstream dependency
+#   - Error traces filtered view
+#
+# APPLY:
+#   oc apply -f grafana-dashboard-traces.yaml -n devsecops-tools
+#
+# VERIFY:
+#   oc get grafanadashboard traces-dashboard -n devsecops-tools
+#   # In Grafana: Dashboards → Distributed Tracing Explorer
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  name: traces-dashboard
+  namespace: devsecops-tools
+  labels:
+    app: grafana
+    team: devsecops
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: "grafana"
+
+  json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "links": [],
+      "panels": [
+        {
+          "title": "Service Map",
+          "type": "nodeGraph",
+          "datasource": { "type": "tempo", "uid": "f315522d-dda8-49ca-b509-1a31f01d7b57" },
+          "gridPos": { "h": 10, "w": 24, "x": 0, "y": 0 },
+          "targets": [
+            {
+              "queryType": "serviceMap",
+              "refId": "A"
+            }
+          ],
+          "description": "Auto-generated service dependency graph from trace spans"
+        },
+        {
+          "title": "Trace Search",
+          "type": "table",
+          "datasource": { "type": "tempo", "uid": "f315522d-dda8-49ca-b509-1a31f01d7b57" },
+          "gridPos": { "h": 12, "w": 24, "x": 0, "y": 10 },
+          "targets": [
+            {
+              "queryType": "traceqlSearch",
+              "refId": "A",
+              "filters": [
+                { "id": "service-name", "tag": "service.name", "operator": "=", "value": ["${service}"], "scope": "resource" },
+                { "id": "min-duration", "tag": "duration", "operator": ">", "value": ["${min_duration}"] }
+              ],
+              "limit": 50
+            }
+          ],
+          "transformations": [],
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "align": "auto" }
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byName", "options": "Duration" },
+                "properties": [
+                  { "id": "unit", "value": "ns" },
+                  { "id": "custom.width", "value": 120 }
+                ]
+              },
+              {
+                "matcher": { "id": "byName", "options": "Trace ID" },
+                "properties": [
+                  { "id": "links", "value": [
+                    {
+                      "title": "View Trace",
+                      "url": "/explore?left=%7B%22datasource%22:%22f315522d-dda8-49ca-b509-1a31f01d7b57%22,%22queries%22:%5B%7B%22queryType%22:%22traceql%22,%22query%22:%22${__data.fields[\"Trace ID\"]}%22%7D%5D%7D",
+                      "targetBlank": true
+                    }
+                  ]}
+                ]
+              }
+            ]
+          },
+          "description": "Search traces by service, operation, and minimum duration"
+        },
+        {
+          "title": "Request Rate by Service (from spans)",
+          "type": "timeseries",
+          "datasource": { "type": "prometheus", "uid": "a28ca1f5-4ea7-4126-8443-e54310c76d57" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
+          "targets": [
+            {
+              "expr": "sum(rate(traces_spanmetrics_calls_total{service_name=~\"$service\"}[5m])) by (service_name, span_name)",
+              "legendFormat": "{{service_name}} — {{span_name}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": { "fillOpacity": 10 }
+            }
+          },
+          "description": "Request rate derived from trace span metrics (if span metrics connector is enabled)"
+        },
+        {
+          "title": "Latency by Service (p50 / p95 / p99)",
+          "type": "timeseries",
+          "datasource": { "type": "prometheus", "uid": "a28ca1f5-4ea7-4126-8443-e54310c76d57" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 22 },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{namespace=~\"sampleapi-.*\", service=~\"$service\"}[5m])) by (le, service))",
+              "legendFormat": "p50 — {{service}}",
+              "refId": "A"
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{namespace=~\"sampleapi-.*\", service=~\"$service\"}[5m])) by (le, service))",
+              "legendFormat": "p95 — {{service}}",
+              "refId": "B"
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{namespace=~\"sampleapi-.*\", service=~\"$service\"}[5m])) by (le, service))",
+              "legendFormat": "p99 — {{service}}",
+              "refId": "C"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": { "fillOpacity": 5 }
+            }
+          },
+          "description": "HTTP request latency percentiles per service (from Prometheus metrics)"
+        },
+        {
+          "title": "Error Traces (status=ERROR)",
+          "type": "table",
+          "datasource": { "type": "tempo", "uid": "f315522d-dda8-49ca-b509-1a31f01d7b57" },
+          "gridPos": { "h": 10, "w": 24, "x": 0, "y": 30 },
+          "targets": [
+            {
+              "queryType": "traceql",
+              "query": "{ status = error && resource.service.name = \"${service}\" }",
+              "refId": "A",
+              "limit": 20
+            }
+          ],
+          "description": "Recent traces with error status — click Trace ID to view span waterfall"
+        },
+        {
+          "title": "Trace Duration Distribution",
+          "type": "histogram",
+          "datasource": { "type": "tempo", "uid": "f315522d-dda8-49ca-b509-1a31f01d7b57" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 40 },
+          "targets": [
+            {
+              "queryType": "traceqlSearch",
+              "refId": "A",
+              "filters": [
+                { "id": "service-name", "tag": "service.name", "operator": "=", "value": ["${service}"], "scope": "resource" }
+              ],
+              "limit": 100
+            }
+          ],
+          "description": "Distribution of trace durations for the selected service"
+        },
+        {
+          "title": "Downstream Dependency Latency",
+          "type": "timeseries",
+          "datasource": { "type": "prometheus", "uid": "a28ca1f5-4ea7-4126-8443-e54310c76d57" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 40 },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(http_client_request_duration_seconds_bucket{namespace=~\"sampleapi-.*\"}[5m])) by (le, http_request_method, url_template))",
+              "legendFormat": "{{http_request_method}} {{url_template}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": { "fillOpacity": 10 }
+            }
+          },
+          "description": "P95 latency for outgoing HTTP calls (SampleApi → NotificationApi)"
+        }
+      ],
+      "templating": {
+        "list": [
+          {
+            "name": "service",
+            "type": "custom",
+            "current": { "text": "sampleapi", "value": "sampleapi" },
+            "options": [
+              { "text": "sampleapi", "value": "sampleapi", "selected": true },
+              { "text": "notificationapi", "value": "notificationapi", "selected": false }
+            ],
+            "query": "sampleapi,notificationapi",
+            "label": "Service"
+          },
+          {
+            "name": "min_duration",
+            "type": "custom",
+            "current": { "text": "100ms", "value": "100ms" },
+            "options": [
+              { "text": "0ms", "value": "0ms" },
+              { "text": "50ms", "value": "50ms" },
+              { "text": "100ms", "value": "100ms", "selected": true },
+              { "text": "500ms", "value": "500ms" },
+              { "text": "1s", "value": "1s" },
+              { "text": "5s", "value": "5s" }
+            ],
+            "query": "0ms,50ms,100ms,500ms,1s,5s",
+            "label": "Min Duration"
+          }
+        ]
+      },
+      "time": { "from": "now-1h", "to": "now" },
+      "timezone": "browser",
+      "title": "Distributed Tracing Explorer",
+      "uid": "devsecops-traces",
+      "version": 1,
+      "schemaVersion": 39
+    }

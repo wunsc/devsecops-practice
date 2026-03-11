@@ -1,0 +1,270 @@
+# infra/phase21/grafana-dashboard-app.yaml
+# GrafanaDashboard CRD — Application Health Dashboard (RED Method)
+#
+# RED = Rate, Errors, Duration — the three golden signals for request-driven services.
+#
+# PANELS:
+#   Row 1: Request Rate (req/s), Error Rate (%), Error Count
+#   Row 2: Duration p50, p95, p99
+#   Row 3: Pod Count, Pod Restarts, Container CPU/Memory
+#
+# VARIABLES:
+#   $namespace: sampleapi-dev | sampleapi-sit | sampleapi-uat | sampleapi-prod
+#   $service:   sampleapi | notificationapi
+#
+# DATA SOURCE: Prometheus (Thanos Querier)
+#
+# APPLY:
+#   oc apply -f grafana-dashboard-app.yaml -n devsecops-tools
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  name: app-health-dashboard
+  namespace: devsecops-tools
+  labels:
+    app: grafana
+    team: devsecops
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: "grafana"
+  json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "liveNow": false,
+      "panels": [
+        {
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+          "id": 100,
+          "title": "Request Rate & Errors",
+          "type": "row"
+        },
+        {
+          "title": "Request Rate (req/s)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 1 },
+          "id": 1,
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "targets": [
+            {
+              "expr": "sum(rate(http_request_duration_seconds_count{namespace=\"$namespace\", job=\"$service\"}[5m]))",
+              "legendFormat": "Total req/s"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": { "drawStyle": "line", "fillOpacity": 10 }
+            }
+          }
+        },
+        {
+          "title": "Error Rate (%)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 1 },
+          "id": 2,
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "targets": [
+            {
+              "expr": "100 * sum(rate(http_request_duration_seconds_count{namespace=\"$namespace\", job=\"$service\", status_code=~\"5..\"}[5m])) / sum(rate(http_request_duration_seconds_count{namespace=\"$namespace\", job=\"$service\"}[5m]))",
+              "legendFormat": "5xx error %"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "custom": { "drawStyle": "line", "fillOpacity": 10 },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 1 },
+                  { "color": "red", "value": 5 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "Error Count (5xx)",
+          "type": "stat",
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
+          "id": 3,
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "targets": [
+            {
+              "expr": "sum(increase(http_request_duration_seconds_count{namespace=\"$namespace\", job=\"$service\", status_code=~\"5..\"}[$__range]))",
+              "legendFormat": "5xx errors"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 1 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
+          "id": 101,
+          "title": "Latency Distribution",
+          "type": "row"
+        },
+        {
+          "title": "Request Duration p50 / p95 / p99",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 16, "x": 0, "y": 10 },
+          "id": 4,
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{namespace=\"$namespace\", job=\"$service\"}[5m])) by (le))",
+              "legendFormat": "p50"
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{namespace=\"$namespace\", job=\"$service\"}[5m])) by (le))",
+              "legendFormat": "p95"
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{namespace=\"$namespace\", job=\"$service\"}[5m])) by (le))",
+              "legendFormat": "p99"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": { "drawStyle": "line", "fillOpacity": 5 }
+            }
+          }
+        },
+        {
+          "title": "Avg Request Duration",
+          "type": "stat",
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 10 },
+          "id": 5,
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "targets": [
+            {
+              "expr": "sum(rate(http_request_duration_seconds_sum{namespace=\"$namespace\", job=\"$service\"}[5m])) / sum(rate(http_request_duration_seconds_count{namespace=\"$namespace\", job=\"$service\"}[5m]))",
+              "legendFormat": "avg"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "s" } }
+        },
+        {
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 },
+          "id": 102,
+          "title": "Pod Health",
+          "type": "row"
+        },
+        {
+          "title": "Running Pods",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 8, "x": 0, "y": 19 },
+          "id": 6,
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "targets": [
+            {
+              "expr": "count(kube_pod_status_ready{namespace=\"$namespace\", condition=\"true\", pod=~\"$service.*\"})",
+              "legendFormat": "Ready pods"
+            }
+          ]
+        },
+        {
+          "title": "Pod Restarts (last 1h)",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 8, "x": 8, "y": 19 },
+          "id": 7,
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "targets": [
+            {
+              "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"$namespace\", pod=~\"$service.*\"}[1h]))",
+              "legendFormat": "Restarts"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 1 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "CPU Usage",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 23 },
+          "id": 8,
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "targets": [
+            {
+              "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"$namespace\", pod=~\"$service.*\", container!=\"\"}[5m])) by (pod)",
+              "legendFormat": "{{pod}}"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "line" } } }
+        },
+        {
+          "title": "Memory Usage",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 23 },
+          "id": 9,
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "targets": [
+            {
+              "expr": "sum(container_memory_working_set_bytes{namespace=\"$namespace\", pod=~\"$service.*\", container!=\"\"}) by (pod)",
+              "legendFormat": "{{pod}}"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "bytes", "custom": { "drawStyle": "line" } } }
+        }
+      ],
+      "refresh": "30s",
+      "schemaVersion": 39,
+      "tags": ["devsecops", "app-health", "RED"],
+      "templating": {
+        "list": [
+          {
+            "name": "datasource",
+            "type": "datasource",
+            "query": "prometheus",
+            "current": { "text": "Prometheus", "value": "Prometheus" }
+          },
+          {
+            "name": "namespace",
+            "type": "custom",
+            "query": "sampleapi-dev,sampleapi-sit,sampleapi-uat,sampleapi-prod",
+            "current": { "text": "sampleapi-dev", "value": "sampleapi-dev" }
+          },
+          {
+            "name": "service",
+            "type": "custom",
+            "query": "sampleapi,notificationapi",
+            "current": { "text": "sampleapi", "value": "sampleapi" }
+          }
+        ]
+      },
+      "time": { "from": "now-1h", "to": "now" },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "App Health (RED Method)",
+      "uid": "devsecops-app-health"
+    }

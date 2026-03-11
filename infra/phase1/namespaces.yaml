@@ -1,0 +1,80 @@
+# infra/phase1/namespaces.yaml
+# All namespaces for the DevSecOps workflow with team labels
+# Apply first: oc apply -f namespaces.yaml
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: devsecops-tools
+  labels:
+    team: devsecops
+    purpose: ci-cd-tools
+    # Jenkins and SonarQube run here
+  annotations:
+    openshift.io/description: "CI/CD tools — Jenkins, SonarQube"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: devsecops-gitlab
+  labels:
+    team: devsecops
+    purpose: source-control
+    # GitLab CE, PostgreSQL, Redis
+  annotations:
+    openshift.io/description: "GitLab CE source control"
+---
+# stackrox namespace is managed by the ACS operator — created in Phase 5
+# Listed here for documentation only; do NOT apply if operator manages it
+# apiVersion: v1
+# kind: Namespace
+# metadata:
+#   name: stackrox
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sampleapi-dev
+  labels:
+    team: devsecops
+    purpose: application
+    environment: dev
+    app: sampleapi
+  annotations:
+    openshift.io/description: "SampleAPI DEV environment"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sampleapi-sit
+  labels:
+    team: devsecops
+    purpose: application
+    environment: sit
+    app: sampleapi
+  annotations:
+    openshift.io/description: "SampleAPI SIT environment"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sampleapi-uat
+  labels:
+    team: devsecops
+    purpose: application
+    environment: uat
+    app: sampleapi
+  annotations:
+    openshift.io/description: "SampleAPI UAT environment"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sampleapi-prod
+  labels:
+    team: devsecops
+    purpose: application
+    environment: production
+    app: sampleapi
+  annotations:
+    openshift.io/description: "SampleAPI PRODUCTION environment"

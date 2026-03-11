@@ -1,0 +1,20 @@
+# services/notificationapi/overlays/production/kustomization.yaml
+# PRODUCTION overlay for NotificationAPI — 2 replicas, PDB
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: sampleapi-prod
+
+resources:
+- ../../base
+- pdb.yaml
+- configmap-env.yaml
+- secret-env.yaml
+
+patches:
+- path: patch-deployment.yaml
+
+images:
+- name: notificationapi
+  newName: image-registry.openshift-image-registry.svc:5000/sampleapi-dev/notificationapi
+  newTag: v1.1.0

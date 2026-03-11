@@ -1,0 +1,143 @@
+# infra/phase1/networkpolicies/app-namespace.yaml
+# Per-app-env network policies: allow inter-pod communication within namespace
+# and allow ArgoCD to manage resources
+---
+# Allow pods within the same namespace to communicate (e.g., app → database)
+# Applied to all 4 app namespaces
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-same-namespace
+  namespace: sampleapi-dev
+  labels:
+    team: devsecops
+    policy: app-namespace
+spec:
+  podSelector: {}
+  ingress:
+    - from:
+        - podSelector: {}  # Any pod in the same namespace
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-same-namespace
+  namespace: sampleapi-sit
+  labels:
+    team: devsecops
+    policy: app-namespace
+spec:
+  podSelector: {}
+  ingress:
+    - from:
+        - podSelector: {}
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-same-namespace
+  namespace: sampleapi-uat
+  labels:
+    team: devsecops
+    policy: app-namespace
+spec:
+  podSelector: {}
+  ingress:
+    - from:
+        - podSelector: {}
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-same-namespace
+  namespace: sampleapi-prod
+  labels:
+    team: devsecops
+    policy: app-namespace
+spec:
+  podSelector: {}
+  ingress:
+    - from:
+        - podSelector: {}
+  policyTypes:
+    - Ingress
+---
+# Allow ArgoCD (openshift-gitops namespace) to reach app namespaces
+# for health checks and resource management
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-from-argocd
+  namespace: sampleapi-dev
+  labels:
+    team: devsecops
+    policy: app-namespace
+spec:
+  podSelector: {}
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-gitops
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-from-argocd
+  namespace: sampleapi-sit
+  labels:
+    team: devsecops
+    policy: app-namespace
+spec:
+  podSelector: {}
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-gitops
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-from-argocd
+  namespace: sampleapi-uat
+  labels:
+    team: devsecops
+    policy: app-namespace
+spec:
+  podSelector: {}
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-gitops
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-from-argocd
+  namespace: sampleapi-prod
+  labels:
+    team: devsecops
+    policy: app-namespace
+spec:
+  podSelector: {}
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-gitops
+  policyTypes:
+    - Ingress

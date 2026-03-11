@@ -1,0 +1,75 @@
+# infra/phase22/grafana-datasource-tempo.yaml
+# GrafanaDatasource — connects Grafana to Tempo via gateway for trace visualization.
+#
+# With multi-tenancy enabled, Grafana queries traces through the Tempo gateway
+# which requires Bearer token authentication. The datasource URL includes the
+# tenant name (default: dev). Users can change tenant in the Console UI.
+#
+# AUTHENTICATION:
+#   Tempo gateway requires Bearer token from a ServiceAccount with
+#   tempostack-traces-read ClusterRole. Token is injected via secureJsonData.
+#
+# PREREQUISITE:
+#   - Generate token: oc create token grafana-sa -n devsecops-tools --duration=8760h
+#     and replace <GRAFANA_SA_TOKEN> in secureJsonData below
+#
+# APPLY:
+#   oc apply -f grafana-datasource-tempo.yaml -n devsecops-tools
+#
+# VERIFY:
+#   oc get grafanadatasource tempo-datasource -n devsecops-tools
+#   # In Grafana UI: Configuration → Data Sources → Tempo should show green "Data source is working"
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDatasource
+metadata:
+  name: tempo-datasource
+  namespace: devsecops-tools
+  labels:
+    app: grafana
+    team: devsecops
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: "grafana"                       # Must match Grafana CR label
+
+  datasource:
+    name: Tempo
+    type: tempo
+    access: proxy
+    # Tempo gateway URL with tenant "dev" (default).
+    # Path: /api/traces/v1/{tenant}/tempo — Grafana appends /api/search, /api/echo, etc.
+    url: "https://tempo-tempo-gateway.openshift-tempo.svc:8080/api/traces/v1/dev/tempo"
+    editable: false
+
+    jsonData:
+      tlsSkipVerify: true
+      httpHeaderName1: "Authorization"
+      # Link traces to Prometheus metrics (exemplar correlation)
+      tracesToMetrics:
+        datasourceUid: a28ca1f5-4ea7-4126-8443-e54310c76d57
+        spanStartTimeShift: "-1h"
+        spanEndTimeShift: "1h"
+        tags:
+          - key: service.name
+            value: service
+          - key: http.method
+            value: method
+      # Link traces to Loki logs (trace-to-log correlation)
+      tracesToLogs:
+        datasourceUid: c0afa6e7-bea8-42a7-9718-af275465a46e
+        spanStartTimeShift: "-1h"
+        spanEndTimeShift: "1h"
+        filterByTraceID: true
+        filterBySpanID: false
+        tags:
+          - key: service.name
+            value: kubernetes_container_name
+      # Service graph (auto-generated from trace spans)
+      serviceMap:
+        datasourceUid: a28ca1f5-4ea7-4126-8443-e54310c76d57
+      # Node graph visualization
+      nodeGraph:
+        enabled: true
+    secureJsonData:
+      httpHeaderValue1: "Bearer <GRAFANA_SA_TOKEN>"

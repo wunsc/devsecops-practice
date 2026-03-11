@@ -1,0 +1,19 @@
+# services/notificationapi/overlays/sit/kustomization.yaml
+# SIT overlay for NotificationAPI — 2 replicas
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: sampleapi-sit
+
+resources:
+- ../../base
+- configmap-env.yaml
+- secret-env.yaml
+
+patches:
+- path: patch-deployment.yaml
+
+images:
+- name: notificationapi
+  newName: image-registry.openshift-image-registry.svc:5000/sampleapi-dev/notificationapi
+  newTag: v1.1.0

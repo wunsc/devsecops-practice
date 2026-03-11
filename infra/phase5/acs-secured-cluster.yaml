@@ -1,0 +1,54 @@
+# infra/phase5/acs-secured-cluster.yaml
+# SecuredCluster CR — deploys Sensor, Collector, and Admission Controller
+# Sensor: communicates with Central, monitors cluster resources
+# Collector: runtime monitoring on each node (eBPF or kernel module)
+# Admission Controller: enforces deploy-time policies
+# Apply AFTER Central is ready AND the init bundle has been generated/applied
+---
+apiVersion: platform.stackrox.io/v1alpha1
+kind: SecuredCluster
+metadata:
+  name: stackrox-secured-cluster-services
+  namespace: stackrox
+  labels:
+    team: devsecops
+spec:
+  # Must match the cluster name used when generating the init bundle
+  clusterName: local-cluster
+  centralEndpoint: "central.stackrox.svc:443"
+  sensor:
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 2Gi
+  admissionControl:
+    # Enable admission controller for deploy-time policy enforcement
+    listenOnCreates: true
+    listenOnUpdates: true
+    listenOnEvents: true
+    # Contact image scanners on admission (may add latency)
+    contactImageScanners: DoNotScanInline
+    # Timeout for admission webhook (seconds)
+    timeoutSeconds: 20
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  perNode:
+    collector:
+      # EBPF collection — no kernel module needed, works on most OCP versions
+      collection: EBPF
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 1Gi
+    taintToleration: TolerateTaints

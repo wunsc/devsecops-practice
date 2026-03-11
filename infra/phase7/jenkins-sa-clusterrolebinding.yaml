@@ -1,0 +1,58 @@
+# infra/phase7/jenkins-sa-clusterrolebinding.yaml
+# ClusterRoleBinding for Jenkins SA — allows Jenkins to manage agent pods
+# cluster-wide and access resources needed for pipeline execution
+---
+# Jenkins SA needs cluster-level pod management for Kubernetes plugin
+# (agent pods may be scheduled on any node)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: jenkins-sa-cluster-admin
+  labels:
+    team: devsecops
+    component: jenkins
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: jenkins-deployer  # ClusterRole from Phase 1
+subjects:
+  - kind: ServiceAccount
+    name: jenkins-sa
+    namespace: devsecops-tools
+---
+# SCC for Jenkins SA — allow it to run pods with the agent image
+# The agent image runs as UID 1000 (jenkins user)
+# anyuid SCC allows specifying the UID in the pod spec
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: jenkins-sa-anyuid
+  labels:
+    team: devsecops
+    component: jenkins
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:openshift:scc:anyuid
+subjects:
+  - kind: ServiceAccount
+    name: jenkins-sa
+    namespace: devsecops-tools
+---
+# Privileged SCC for Podman builds inside agent pods
+# Required for rootless Podman with --isolation=chroot
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: jenkins-sa-privileged
+  labels:
+    team: devsecops
+    component: jenkins
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:openshift:scc:privileged
+subjects:
+  - kind: ServiceAccount
+    name: jenkins-sa
+    namespace: devsecops-tools

@@ -1,0 +1,96 @@
+# infra/phase17/networkpolicies/allow-app-to-notification.yaml
+# Allow ingress to NotificationApi pods (port 8081) ONLY from SampleApi pods
+# SampleApi calls NotificationApi to send notifications (HTTP REST)
+# Applied to: sampleapi-dev, sampleapi-sit, sampleapi-uat, sampleapi-prod
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-app-to-notificationapi
+  namespace: sampleapi-dev
+  labels:
+    team: devsecops
+    policy: allow-app-to-notificationapi
+spec:
+  podSelector:
+    matchLabels:
+      app: notificationapi  # Target: NotificationApi pods
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: sampleapi  # Source: only SampleApi pods
+      ports:
+        - protocol: TCP
+          port: 8081
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-app-to-notificationapi
+  namespace: sampleapi-sit
+  labels:
+    team: devsecops
+    policy: allow-app-to-notificationapi
+spec:
+  podSelector:
+    matchLabels:
+      app: notificationapi
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: sampleapi
+      ports:
+        - protocol: TCP
+          port: 8081
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-app-to-notificationapi
+  namespace: sampleapi-uat
+  labels:
+    team: devsecops
+    policy: allow-app-to-notificationapi
+spec:
+  podSelector:
+    matchLabels:
+      app: notificationapi
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: sampleapi
+      ports:
+        - protocol: TCP
+          port: 8081
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-app-to-notificationapi
+  namespace: sampleapi-prod
+  labels:
+    team: devsecops
+    policy: allow-app-to-notificationapi
+spec:
+  podSelector:
+    matchLabels:
+      app: notificationapi
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: sampleapi
+      ports:
+        - protocol: TCP
+          port: 8081
+  policyTypes:
+    - Ingress

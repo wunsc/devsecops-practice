@@ -1,0 +1,144 @@
+# infra/phase22/otel-collector.yaml
+# OpenTelemetryCollector CR — receives traces via OTLP and forwards to Tempo gateway.
+#
+# The collector runs in Deployment mode (not DaemonSet) since we only need
+# to receive traces from application pods, not from every node.
+#
+# Applications send traces to: otel-collector-collector.openshift-tempo.svc:4317 (gRPC OTLP)
+# Collector routes traces per-tenant to Tempo gateway based on k8s.namespace.name:
+#   sampleapi-dev  → tenant "dev"
+#   sampleapi-sit  → tenant "sit"
+#   sampleapi-uat  → tenant "uat"
+#   sampleapi-prod → tenant "prod"
+#
+# PREREQUISITE:
+#   - OTel Operator installed and ready
+#   - TempoStack deployed with openshift tenancy + gateway enabled
+#   - RBAC: tempostack-traces-write ClusterRoleBinding for collector SA
+#   - Generate SA token: oc create token otel-collector-collector -n openshift-tempo --duration=8760h
+#     and replace <COLLECTOR_SA_TOKEN> below
+#
+# APPLY:
+#   oc apply -f otel-collector.yaml -n openshift-tempo
+#
+# VERIFY:
+#   oc get pods -n openshift-tempo -l app.kubernetes.io/name=otel-collector-collector
+#   # Expected: 1 pod Running
+---
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: otel-collector
+  namespace: openshift-tempo
+spec:
+  mode: deployment
+  observability:
+    metrics:
+      enableMetrics: true                         # Expose collector's own metrics
+
+  config:
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317               # gRPC OTLP receiver (app traces arrive here)
+          http:
+            endpoint: 0.0.0.0:4318               # HTTP OTLP receiver (fallback)
+
+    processors:
+      batch:
+        send_batch_size: 10000                    # Batch traces before sending to Tempo
+        timeout: 5s
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 512                            # Prevent OOM — drop traces if memory exceeds limit
+        spike_limit_mib: 128
+      resource:
+        attributes:
+          - key: cluster.name
+            value: "ocp-pmqwq"                    # Add cluster name to all traces
+            action: upsert
+
+    exporters:
+      # Per-tenant OTLP HTTP exporters — each sends to the Tempo gateway
+      # with Bearer token auth. The gateway URL includes the tenant name.
+      otlphttp/dev:
+        endpoint: "https://tempo-tempo-gateway.openshift-tempo.svc:8080/api/traces/v1/dev"
+        tls:
+          insecure_skip_verify: true
+        headers:
+          Authorization: "Bearer <COLLECTOR_SA_TOKEN>"
+      otlphttp/sit:
+        endpoint: "https://tempo-tempo-gateway.openshift-tempo.svc:8080/api/traces/v1/sit"
+        tls:
+          insecure_skip_verify: true
+        headers:
+          Authorization: "Bearer <COLLECTOR_SA_TOKEN>"
+      otlphttp/uat:
+        endpoint: "https://tempo-tempo-gateway.openshift-tempo.svc:8080/api/traces/v1/uat"
+        tls:
+          insecure_skip_verify: true
+        headers:
+          Authorization: "Bearer <COLLECTOR_SA_TOKEN>"
+      otlphttp/prod:
+        endpoint: "https://tempo-tempo-gateway.openshift-tempo.svc:8080/api/traces/v1/prod"
+        tls:
+          insecure_skip_verify: true
+        headers:
+          Authorization: "Bearer <COLLECTOR_SA_TOKEN>"
+      debug:
+        verbosity: basic                          # Log summaries (lab only, disable for production)
+
+    connectors:
+      # Routing connector — routes traces to per-tenant exporters
+      # based on the k8s.namespace.name resource attribute.
+      routing:
+        default_pipelines: [traces/dev]           # Fallback to dev tenant
+        error_mode: ignore
+        table:
+          - statement: 'route() where attributes["k8s.namespace.name"] == "sampleapi-dev"'
+            pipelines: [traces/dev]
+          - statement: 'route() where attributes["k8s.namespace.name"] == "sampleapi-sit"'
+            pipelines: [traces/sit]
+          - statement: 'route() where attributes["k8s.namespace.name"] == "sampleapi-uat"'
+            pipelines: [traces/uat]
+          - statement: 'route() where attributes["k8s.namespace.name"] == "sampleapi-prod"'
+            pipelines: [traces/prod]
+
+    service:
+      pipelines:
+        # Main traces pipeline — receives all traces, routes to per-tenant pipelines
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, resource, batch]
+          exporters: [routing]
+        # Per-tenant trace pipelines — each exports to its tenant's gateway endpoint
+        traces/dev:
+          receivers: [routing]
+          exporters: [otlphttp/dev]
+        traces/sit:
+          receivers: [routing]
+          exporters: [otlphttp/sit]
+        traces/uat:
+          receivers: [routing]
+          exporters: [otlphttp/uat]
+        traces/prod:
+          receivers: [routing]
+          exporters: [otlphttp/prod]
+        # Metrics and logs from auto-instrumented apps — debug only (no backend)
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [debug]
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [debug]
+      telemetry:
+        metrics:
+          readers:
+            - pull:
+                exporter:
+                  prometheus:
+                    host: 0.0.0.0
+                    port: 8888

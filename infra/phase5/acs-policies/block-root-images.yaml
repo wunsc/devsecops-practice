@@ -1,0 +1,66 @@
+# infra/phase5/acs-policies/block-root-images.yaml
+# Deploy-time policy: Block containers running as root user
+# Enforced by the ACS admission controller at deploy time
+# Containers must use a non-root user (USER directive in Dockerfile)
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: acs-policy-block-root-images
+  namespace: stackrox
+  labels:
+    team: devsecops
+    acs-policy: "true"
+    policy-lifecycle: deploy
+  annotations:
+    description: |
+      Block deployments where containers run as root (UID 0).
+      Our Dockerfile uses USER 1001 — this policy enforces that convention.
+      Violations trigger admission controller rejection.
+data:
+  policy.json: |
+    {
+      "name": "Block Root User Containers",
+      "description": "Block deployment of containers configured to run as root (UID 0). All containers must specify a non-root USER.",
+      "rationale": "Running as root inside a container increases the blast radius of container escapes and privilege escalation attacks.",
+      "remediation": "Add 'USER <non-root-uid>' to your Dockerfile. Our standard is USER 1001.",
+      "categories": ["Security Best Practices"],
+      "lifecycleStages": ["DEPLOY"],
+      "severity": "HIGH_SEVERITY",
+      "enforcementActions": ["SCALE_TO_ZERO_ENFORCEMENT"],
+      "disabled": false,
+      "policySections": [
+        {
+          "sectionName": "Root User Check",
+          "policyGroups": [
+            {
+              "fieldName": "Image User",
+              "values": [
+                {
+                  "value": "0"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "scope": [
+        {
+          "cluster": "",
+          "namespace": "sampleapi-dev"
+        },
+        {
+          "cluster": "",
+          "namespace": "sampleapi-sit"
+        },
+        {
+          "cluster": "",
+          "namespace": "sampleapi-uat"
+        },
+        {
+          "cluster": "",
+          "namespace": "sampleapi-prod"
+        }
+      ],
+      "exclusions": []
+    }

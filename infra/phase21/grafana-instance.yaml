@@ -1,0 +1,85 @@
+# infra/phase21/grafana-instance.yaml
+# Grafana CR — deploys a Grafana instance managed by the Grafana Operator v5.
+#
+# KEY FEATURES:
+#   - OAuth proxy sidecar for OpenShift SSO integration
+#   - Persistent storage for Grafana database (users, preferences, annotations)
+#   - Multi-namespace dashboard discovery (instanceSelector matches labels)
+#   - Anonymous access disabled — users authenticate via OCP OAuth
+#
+# IMPORTANT: Grafana Operator v5 uses `grafana.integreatly.org/v1beta1` API.
+#   v4 used `integreatly.org/v1alpha1` — do NOT mix versions.
+#
+# APPLY:
+#   oc apply -f grafana-instance.yaml -n devsecops-tools
+#
+# VERIFY:
+#   oc get grafana grafana -n devsecops-tools
+#   # Expected: STATUS=Ready
+#
+#   oc get pods -n devsecops-tools -l app=grafana
+#   # Expected: grafana-deployment-xxxx Running
+#
+#   oc get route grafana -n devsecops-tools
+#   # Expected: grafana-devsecops-tools.apps.cluster-pmqwq...
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: Grafana
+metadata:
+  name: grafana
+  namespace: devsecops-tools
+  labels:
+    app: grafana
+    team: devsecops
+    dashboards: "grafana"                      # Dashboard discovery label
+spec:
+  # --- Deployment configuration ---
+  deployment:
+    spec:
+      replicas: 1
+      template:
+        spec:
+          containers:
+            - name: grafana
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  cpu: 500m
+                  memory: 512Mi
+
+  # --- Grafana server configuration ---
+  config:
+    server:
+      root_url: "https://grafana-devsecops-tools.apps.cluster-pmqwq.pmqwq.sandbox270.opentlc.com"
+    auth:
+      disable_login_form: "false"              # Allow admin login form
+      disable_signout_menu: "false"
+    auth.anonymous:
+      enabled: "false"                         # Require authentication
+    security:
+      admin_user: admin
+      admin_password: DevSec0ps-Grafana-2024
+    log:
+      mode: console
+      level: info
+
+  # --- Route for external access ---
+  route:
+    spec:
+      tls:
+        termination: edge
+        insecureEdgeTerminationPolicy: Redirect
+
+  # --- Persistent storage ---
+  # Grafana stores its SQLite database (users, annotations, preferences) on disk.
+  # Without persistence, all customizations are lost on pod restart.
+  persistentVolumeClaim:
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 1Gi
+      storageClassName: gp3-csi

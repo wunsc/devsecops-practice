@@ -1,0 +1,50 @@
+<!-- jenkins-shared-lib/resources/com/devsecops/notification-template.html -->
+<!-- Email notification template for pipeline results -->
+<!-- Used by notifyTeam.groovy for rich HTML email notifications -->
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .header { padding: 15px; color: white; border-radius: 5px; }
+        .success { background-color: #4CAF50; }
+        .failure { background-color: #f44336; }
+        .unstable { background-color: #ff9800; }
+        .details { margin: 15px 0; }
+        .details table { border-collapse: collapse; width: 100%; }
+        .details td, .details th { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        .details th { background-color: #f2f2f2; }
+        .footer { color: #666; font-size: 12px; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="header ${STATUS_CLASS}">
+        <h2>Pipeline: ${JOB_NAME} #${BUILD_NUMBER}</h2>
+        <p>Status: ${STATUS}</p>
+    </div>
+
+    <div class="details">
+        <table>
+            <tr><th>Property</th><th>Value</th></tr>
+            <tr><td>Application</td><td>${APP_NAME}</td></tr>
+            <tr><td>Branch/Tag</td><td>${BRANCH}</td></tr>
+            <tr><td>Commit</td><td>${GIT_COMMIT}</td></tr>
+            <tr><td>Duration</td><td>${DURATION}</td></tr>
+            <tr><td>Image Tag</td><td>${IMAGE_TAG}</td></tr>
+        </table>
+    </div>
+
+    <div class="details">
+        <h3>Stage Results</h3>
+        <table>
+            <tr><th>Stage</th><th>Status</th><th>Details</th></tr>
+            ${STAGE_RESULTS}
+        </table>
+    </div>
+
+    <div class="footer">
+        <p><a href="${BUILD_URL}">View Build in Jenkins</a></p>
+        <p>DevSecOps CI/CD Pipeline</p>
+    </div>
+</body>
+</html>

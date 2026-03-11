@@ -1,0 +1,91 @@
+# infra/phase19/cluster-log-forwarder-sa.yaml
+# ServiceAccount and RBAC for the Vector log collector.
+#
+# In Logging 6.x (observability.openshift.io/v1 API), the ClusterLogForwarder
+# requires an explicit ServiceAccount with specific ClusterRoles bound.
+# The collector (Vector DaemonSet) runs under this SA.
+#
+# Required ClusterRoles:
+#   - collect-application-logs:    read container logs from /var/log/pods/*
+#   - collect-infrastructure-logs: read infra component logs (kube-*, openshift-*)
+#   - collect-audit-logs:          read API audit logs from /var/log/audit/*
+#   - logging-collector-logs-writer: write to LokiStack endpoints
+#
+# APPLY:
+#   oc apply -f cluster-log-forwarder-sa.yaml
+#
+# VERIFY:
+#   oc get sa logcollector -n openshift-logging
+#   oc get clusterrolebinding -l app=logcollector
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: logcollector
+  namespace: openshift-logging
+  labels:
+    app: logcollector
+---
+# Allow reading application container logs
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: logcollector-application-logs
+  labels:
+    app: logcollector
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: collect-application-logs               # Provided by Cluster Logging Operator
+subjects:
+  - kind: ServiceAccount
+    name: logcollector
+    namespace: openshift-logging
+---
+# Allow reading infrastructure logs (openshift-*, kube-* namespaces)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: logcollector-infrastructure-logs
+  labels:
+    app: logcollector
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: collect-infrastructure-logs            # Provided by Cluster Logging Operator
+subjects:
+  - kind: ServiceAccount
+    name: logcollector
+    namespace: openshift-logging
+---
+# Allow reading audit logs (API server, OAuth, node audit)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: logcollector-audit-logs
+  labels:
+    app: logcollector
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: collect-audit-logs                     # Provided by Cluster Logging Operator
+subjects:
+  - kind: ServiceAccount
+    name: logcollector
+    namespace: openshift-logging
+---
+# Allow writing logs to LokiStack
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: logcollector-logs-writer
+  labels:
+    app: logcollector
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: logging-collector-logs-writer          # Provided by Loki Operator
+subjects:
+  - kind: ServiceAccount
+    name: logcollector
+    namespace: openshift-logging

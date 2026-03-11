@@ -1,0 +1,52 @@
+{
+  "_comment": "infra/phase13/acs-policies/deploy-require-signature.json",
+  "_comment2": "ACS Deploy-time policy: require Cosign signature for production images",
+  "_comment3": "OPTIONAL — requires Cosign signing key configured in pipeline (T3)",
+  "_comment4": "Only enforced in production namespace; informational in lower envs",
+  "policies": [
+    {
+      "name": "DevSecOps - Require Image Signature (Deploy)",
+      "description": "Requires container images deployed to production to be signed with Cosign. This verifies image provenance and ensures only images that passed the full T3 pipeline are promoted.",
+      "rationale": "Image signing provides cryptographic proof that the image was built by a trusted CI pipeline and has not been tampered with. This is a key supply chain security control.",
+      "remediation": "Run the T3 (tag) pipeline to build and sign the image with Cosign. The signImage.groovy function in the shared library handles signing. Ensure the cosign-signing-key credential is configured in Jenkins.",
+      "categories": [
+        "Supply Chain Security"
+      ],
+      "lifecycleStages": [
+        "DEPLOY"
+      ],
+      "severity": "MEDIUM_SEVERITY",
+      "enforcementActions": [
+        "SCALE_TO_ZERO_ENFORCEMENT"
+      ],
+      "policySections": [
+        {
+          "sectionName": "Image Signature Verification",
+          "policyGroups": [
+            {
+              "fieldName": "Image Signature Verified By",
+              "booleanOperator": "OR",
+              "negate": true,
+              "values": [
+                {
+                  "value": "io.stackrox.signatureintegration.*"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "scope": [
+        {
+          "cluster": null,
+          "namespace": "sampleapi-prod",
+          "label": null
+        }
+      ],
+      "exclusions": [],
+      "disabled": true,
+      "isDefault": false,
+      "_note": "Disabled by default — enable after Cosign signing key is configured and signature integration is set up in ACS. Set disabled=false and configure a Cosign signature integration in ACS to activate."
+    }
+  ]
+}

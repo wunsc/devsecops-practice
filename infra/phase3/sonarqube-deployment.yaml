@@ -1,0 +1,190 @@
+# infra/phase3/sonarqube-deployment.yaml
+# SonarQube CE deployment with init container for Elasticsearch requirements
+# SonarQube uses embedded Elasticsearch which requires vm.max_map_count >= 262144
+# The init container sets this via sysctl (requires privileged SCC)
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sonarqube
+  namespace: devsecops-tools
+  labels:
+    team: devsecops
+    app: sonarqube
+    component: sast
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: sonarqube
+  template:
+    metadata:
+      labels:
+        app: sonarqube
+        team: devsecops
+    spec:
+      # Init container to set vm.max_map_count for Elasticsearch
+      # This requires the SCC 'privileged' or a custom SCC allowing sysctl
+      # Grant with: oc adm policy add-scc-to-user privileged -z default -n devsecops-tools
+      initContainers:
+        - name: sysctl-init
+          image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+          command:
+            - sh
+            - -c
+            - |
+              echo 262144 > /proc/sys/vm/max_map_count
+              echo 131072 > /proc/sys/fs/file-max
+          securityContext:
+            privileged: true
+            runAsUser: 0
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+        # Init container to fix permissions on data directories
+        - name: volume-permissions
+          image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+          command:
+            - sh
+            - -c
+            - |
+              chown -R 1000:0 /opt/sonarqube/data
+              chown -R 1000:0 /opt/sonarqube/extensions
+              chown -R 1000:0 /opt/sonarqube/logs
+              chown -R 1000:0 /opt/sonarqube/temp
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: sonarqube-data
+              mountPath: /opt/sonarqube/data
+            - name: sonarqube-extensions
+              mountPath: /opt/sonarqube/extensions
+            - name: sonarqube-logs
+              mountPath: /opt/sonarqube/logs
+            - name: sonarqube-temp
+              mountPath: /opt/sonarqube/temp
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+      containers:
+        - name: sonarqube
+          image: docker.io/sonarqube:26.3.0.120487-community
+          ports:
+            - containerPort: 9000
+              name: http
+              protocol: TCP
+          env:
+            # Database connection via JDBC (SonarQube standard env vars)
+            - name: SONAR_JDBC_URL
+              valueFrom:
+                secretKeyRef:
+                  name: sonarqube-db-credentials
+                  key: SONARQUBE_JDBC_URL
+            - name: SONAR_JDBC_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: sonarqube-db-credentials
+                  key: SONARQUBE_DB_USER
+            - name: SONAR_JDBC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sonarqube-db-credentials
+                  key: SONARQUBE_DB_PASSWORD
+          resources:
+            requests:
+              cpu: 500m
+              memory: 2Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          volumeMounts:
+            - name: sonarqube-data
+              mountPath: /opt/sonarqube/data
+            - name: sonarqube-extensions
+              mountPath: /opt/sonarqube/extensions
+            - name: sonarqube-logs
+              mountPath: /opt/sonarqube/logs
+            - name: sonarqube-temp
+              mountPath: /opt/sonarqube/temp
+            - name: sonarqube-config
+              mountPath: /opt/sonarqube/conf/sonar.properties
+              subPath: sonar.properties
+              readOnly: true
+          startupProbe:
+            httpGet:
+              path: /api/system/status
+              port: 9000
+            initialDelaySeconds: 120
+            periodSeconds: 15
+            failureThreshold: 60  # 120 + (15*60) = up to 1020s for startup
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/system/status
+              port: 9000
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/system/status
+              port: 9000
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: sonarqube-config
+          configMap:
+            name: sonarqube-config
+        - name: sonarqube-data
+          persistentVolumeClaim:
+            claimName: sonarqube-data
+        - name: sonarqube-extensions
+          persistentVolumeClaim:
+            claimName: sonarqube-extensions
+        - name: sonarqube-logs
+          emptyDir: {}
+        - name: sonarqube-temp
+          emptyDir: {}
+---
+# PVC for SonarQube data (Elasticsearch indices, database cache)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sonarqube-data
+  namespace: devsecops-tools
+  labels:
+    team: devsecops
+    app: sonarqube
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: gp3-csi
+  resources:
+    requests:
+      storage: 10Gi
+---
+# PVC for SonarQube extensions (plugins)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sonarqube-extensions
+  namespace: devsecops-tools
+  labels:
+    team: devsecops
+    app: sonarqube
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: gp3-csi
+  resources:
+    requests:
+      storage: 2Gi

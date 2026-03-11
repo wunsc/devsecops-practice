@@ -1,0 +1,25 @@
+# infra/phase2/gitlab-route.yaml
+# TLS edge-terminated Route for GitLab CE
+# External URL: https://gitlab-devsecops-gitlab.apps.<cluster-domain>
+# TLS termination at router, plain HTTP to GitLab Nginx on 8080
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: gitlab
+  namespace: devsecops-gitlab
+  labels:
+    team: devsecops
+    app: gitlab-ce
+spec:
+  # Host auto-generated from: <route-name>-<namespace>.apps.<cluster-domain>
+  # Matches external_url in gitlab.rb
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  to:
+    kind: Service
+    name: gitlab-ce
+    weight: 100
+  port:
+    targetPort: http

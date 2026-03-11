@@ -1,0 +1,44 @@
+{
+  "_comment": "infra/phase13/acs-policies/build-block-critical-cves.json",
+  "_comment2": "ACS Build-time policy: block images with critical CVEs (CVSS >= 9.0)",
+  "_comment3": "Import via: roxctl -e $ACS_CENTRAL_URL policy import --file=this-file.json",
+  "policies": [
+    {
+      "name": "DevSecOps - Block Critical CVEs (Build)",
+      "description": "Fails the CI build if the container image contains any CVE with CVSS score >= 9.0. This is a hard gate — no exceptions without explicit suppression.",
+      "rationale": "Critical vulnerabilities with CVSS >= 9.0 pose an immediate exploitation risk and must be remediated before the image can proceed through the pipeline.",
+      "remediation": "Update the vulnerable package to a patched version, or replace it with an alternative. If the CVE is a false positive, add it to the dependency-check suppression file (build-config/dependency-check-suppression.xml).",
+      "categories": [
+        "Vulnerability Management"
+      ],
+      "lifecycleStages": [
+        "BUILD"
+      ],
+      "severity": "CRITICAL_SEVERITY",
+      "enforcementActions": [
+        "FAIL_BUILD_ENFORCEMENT"
+      ],
+      "policySections": [
+        {
+          "sectionName": "Critical CVSS Score",
+          "policyGroups": [
+            {
+              "fieldName": "CVSS",
+              "booleanOperator": "OR",
+              "negate": false,
+              "values": [
+                {
+                  "value": ">= 9.0"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "scope": [],
+      "exclusions": [],
+      "disabled": false,
+      "isDefault": false
+    }
+  ]
+}

@@ -1,0 +1,198 @@
+# infra/phase7/Dockerfile.agent
+# Custom Jenkins agent image for DevSecOps pipelines
+# Contains: .NET SDK 8.0, Podman, roxctl, sonar-scanner, dependency-check,
+#           gitleaks, cosign, kustomize, OWASP ZAP CLI, git
+#
+# KNOWN FIXES:
+#   - Podman on OpenShift requires --storage-driver=vfs and --isolation=chroot
+#   - subuid/subgid entries needed for rootless Podman
+#   - .NET SonarScanner is a dotnet global tool (not standalone sonar-scanner)
+#   - dependency-check command is "dependency-check" (no .sh suffix)
+#   - cosign installed for optional image signing
+#
+# Build with OCP BuildConfig or:
+#   podman build -f Dockerfile.agent -t jenkins-agent-devsecops:latest .
+
+FROM registry.access.redhat.com/ubi9/ubi:latest
+
+LABEL maintainer="DevSecOps Team" \
+      description="Jenkins agent with .NET SDK, Podman, and security scanning tools" \
+      io.k8s.description="Jenkins agent for DevSecOps CI/CD pipelines" \
+      io.openshift.tags="jenkins,agent,dotnet,podman,security"
+
+# --- Environment variables ---
+ENV HOME=/home/jenkins \
+    DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+    DOTNET_NOLOGO=true \
+    SONAR_SCANNER_VERSION=6.1.0.4477 \
+    DEPENDENCY_CHECK_VERSION=12.1.0 \
+    GITLEAKS_VERSION=8.18.4 \
+    COSIGN_VERSION=2.2.4 \
+    KUSTOMIZE_VERSION=5.4.2 \
+    ROXCTL_VERSION=4.5.4 \
+    ZAP_VERSION=2.15.0 \
+    K6_VERSION=0.54.0
+
+USER root
+
+# --- System packages ---
+RUN dnf install -y --setopt=tsflags=nodocs --allowerasing \
+        git \
+        curl \
+        wget \
+        unzip \
+        tar \
+        gzip \
+        which \
+        findutils \
+        procps-ng \
+        jq \
+        python3 \
+        python3-pip \
+        java-17-openjdk-headless \
+        podman \
+        fuse-overlayfs \
+        shadow-utils \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf
+
+# --- Podman configuration for OpenShift ---
+# OpenShift runs containers with arbitrary UIDs; Podman needs vfs storage driver
+# and subuid/subgid mappings for rootless operation
+RUN echo "jenkins:1000:65536" >> /etc/subuid && \
+    echo "jenkins:1000:65536" >> /etc/subgid
+
+# Podman storage config — vfs is required on OpenShift (no fuse device)
+RUN mkdir -p /home/jenkins/.config/containers && \
+    echo '[storage]' > /home/jenkins/.config/containers/storage.conf && \
+    echo 'driver = "vfs"' >> /home/jenkins/.config/containers/storage.conf && \
+    echo '' >> /home/jenkins/.config/containers/storage.conf && \
+    echo '[storage.options.vfs]' >> /home/jenkins/.config/containers/storage.conf
+
+# Podman registries config — allow short-name pulls
+RUN mkdir -p /etc/containers && \
+    echo 'unqualified-search-registries = ["registry.access.redhat.com", "docker.io"]' \
+    > /etc/containers/registries.conf
+
+# --- .NET SDK 8.0 ---
+# Microsoft RPM installs SDK to /usr/share/dotnet/sdk/ but dotnet-host (from RHEL)
+# looks in /usr/lib64/dotnet/sdk/ — symlink to bridge the gap
+RUN rpm -Uvh https://packages.microsoft.com/config/rhel/9/packages-microsoft-prod.rpm && \
+    dnf install -y dotnet-sdk-8.0 && \
+    dnf clean all && \
+    ln -s /usr/share/dotnet/sdk /usr/lib64/dotnet/sdk && \
+    ln -s /usr/share/dotnet/sdk-manifests /usr/lib64/dotnet/sdk-manifests && \
+    ln -s /usr/share/dotnet/templates /usr/lib64/dotnet/templates
+
+# --- .NET SonarScanner (global tool) ---
+# The .NET SonarScanner is a dotnet global tool, NOT the standalone sonar-scanner CLI
+# Usage: dotnet sonarscanner begin /k:"project" /d:sonar.host.url="..."
+RUN dotnet tool install --global dotnet-sonarscanner && \
+    dotnet tool install --global dotnet-reportgenerator-globaltool
+ENV PATH="${PATH}:/home/jenkins/.dotnet/tools:/root/.dotnet/tools"
+
+# --- OWASP Dependency-Check ---
+# Command is "dependency-check" (no .sh suffix)
+RUN mkdir -p /opt/dependency-check && \
+    curl -sL "https://github.com/jeremylong/DependencyCheck/releases/download/v${DEPENDENCY_CHECK_VERSION}/dependency-check-${DEPENDENCY_CHECK_VERSION}-release.zip" \
+        -o /tmp/dc.zip && \
+    unzip -q /tmp/dc.zip -d /opt/ && \
+    rm /tmp/dc.zip && \
+    chmod +x /opt/dependency-check/bin/dependency-check.sh && \
+    ln -s /opt/dependency-check/bin/dependency-check.sh /usr/local/bin/dependency-check
+ENV PATH="${PATH}:/opt/dependency-check/bin"
+
+# --- roxctl CLI (ACS/StackRox) ---
+# Known: v4.5.4 has no --force-print-all-violations flag
+RUN curl -sL "https://mirror.openshift.com/pub/rhacs/assets/${ROXCTL_VERSION}/bin/Linux/roxctl" \
+        -o /usr/local/bin/roxctl && \
+    chmod +x /usr/local/bin/roxctl
+
+# --- gitleaks (secret detection) ---
+RUN curl -sL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+        | tar xz -C /usr/local/bin gitleaks && \
+    chmod +x /usr/local/bin/gitleaks
+
+# --- cosign (image signing) ---
+RUN curl -sL "https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign-linux-amd64" \
+        -o /usr/local/bin/cosign && \
+    chmod +x /usr/local/bin/cosign
+
+# --- kustomize ---
+RUN curl -sL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz" \
+        | tar xz -C /usr/local/bin && \
+    chmod +x /usr/local/bin/kustomize
+
+# --- OWASP ZAP Python API client ---
+# Full ZAP daemon is too large for the agent image; install the Python API client only
+# The scanOWASPZAP.groovy function checks for zap.sh availability and skips if absent
+RUN pip3 install --no-cache-dir zaproxy python-owasp-zap-v2.4
+
+# --- oc CLI (OpenShift client) ---
+RUN curl -sL "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/openshift-client-linux.tar.gz" \
+        | tar xz -C /usr/local/bin oc kubectl && \
+    chmod +x /usr/local/bin/oc /usr/local/bin/kubectl
+
+# --- ArgoCD CLI ---
+RUN curl -sL "https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64" \
+        -o /usr/local/bin/argocd && \
+    chmod +x /usr/local/bin/argocd
+
+# --- k6 (performance testing) ---
+# Used by runPerformanceTest.groovy as a quality gate in T3 pipeline
+# Exit code 99 = threshold breach → pipeline fails
+RUN curl -sL "https://github.com/grafana/k6/releases/download/v${K6_VERSION}/k6-v${K6_VERSION}-linux-amd64.tar.gz" \
+        | tar xz --strip-components=1 -C /usr/local/bin k6-v${K6_VERSION}-linux-amd64/k6 && \
+    chmod +x /usr/local/bin/k6
+
+# --- Jenkins agent setup ---
+# Create jenkins user with UID 1000 (matches jenkins/jenkins image convention)
+RUN useradd -u 1000 -m -d /home/jenkins -s /bin/bash jenkins && \
+    mkdir -p /home/jenkins/agent && \
+    chown -R 1000:0 /home/jenkins && \
+    chmod -R g=u /home/jenkins
+
+# Jenkins remoting agent JAR directory — JAR is downloaded at runtime from controller
+RUN mkdir -p /usr/share/jenkins && chmod 777 /usr/share/jenkins
+
+# --- Working directory permissions ---
+# OpenShift assigns arbitrary UIDs in the root group (0)
+# Ensure all tool directories are group-writable
+RUN chmod -R g=u /opt/dependency-check && \
+    mkdir -p /tmp/.dotnet /tmp/NuGetScratch && \
+    chmod -R 777 /tmp/.dotnet /tmp/NuGetScratch
+
+WORKDIR /home/jenkins/agent
+
+# --- Jenkins agent entrypoint ---
+# The Kubernetes plugin sets env vars: JENKINS_URL, JENKINS_SECRET,
+# JENKINS_AGENT_NAME, JENKINS_TUNNEL. This entrypoint uses them to
+# start the remoting agent connection to the Jenkins controller.
+# Falls back to bash if no JENKINS_URL is set (for local testing).
+RUN printf '#!/bin/bash\n\
+if [ -n "$JENKINS_URL" ] && [ -n "$JENKINS_SECRET" ] && [ -n "$JENKINS_AGENT_NAME" ]; then\n\
+  # Download the matching agent.jar from the Jenkins controller\n\
+  curl -sL "${JENKINS_URL}jnlpJars/agent.jar" -o /usr/share/jenkins/agent.jar\n\
+  exec java -jar /usr/share/jenkins/agent.jar \\\n\
+    -url "$JENKINS_URL" \\\n\
+    -secret "$JENKINS_SECRET" \\\n\
+    -name "$JENKINS_AGENT_NAME" \\\n\
+    -tunnel "$JENKINS_TUNNEL" \\\n\
+    -workDir /home/jenkins/agent\n\
+else\n\
+  exec /bin/bash "$@"\n\
+fi\n' > /usr/local/bin/jenkins-agent && \
+    chmod +x /usr/local/bin/jenkins-agent
+
+USER 1000
+
+# Verify installations
+RUN dotnet --version && \
+    podman --version && \
+    gitleaks version && \
+    kustomize version && \
+    k6 version && \
+    dependency-check --version || true && \
+    echo "All tools installed successfully"
+
+ENTRYPOINT ["/usr/local/bin/jenkins-agent"]

@@ -1,0 +1,9 @@
+# services/sampleapi/base/kustomization.yaml
+# Base resources for SampleAPI service
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- deployment.yaml
+- service.yaml
+- route.yaml

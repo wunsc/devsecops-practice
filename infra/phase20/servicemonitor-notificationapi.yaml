@@ -1,0 +1,40 @@
+# infra/phase20/servicemonitor-notificationapi.yaml
+# ServiceMonitor for NotificationApi — scrapes /metrics from NotificationApi pods.
+#
+# Same pattern as sampleapi-monitor. NotificationApi exposes prometheus-net metrics
+# on port 8081 at /metrics.
+#
+# DEPLOY TO: Each app namespace (DEV, SIT, UAT, PROD).
+#   oc apply -f servicemonitor-notificationapi.yaml -n sampleapi-dev
+#   oc apply -f servicemonitor-notificationapi.yaml -n sampleapi-sit
+#   (etc.)
+#
+# VERIFY:
+#   oc get servicemonitor -n sampleapi-dev
+#   # Expected: notificationapi-monitor alongside sampleapi-monitor
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: notificationapi-monitor
+  labels:
+    app: notificationapi
+    team: devsecops
+spec:
+  selector:
+    matchLabels:
+      app: notificationapi
+
+  endpoints:
+    - port: http                               # Service port name (8081)
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          targetLabel: pod
+
+  namespaceSelector:
+    matchNames: []

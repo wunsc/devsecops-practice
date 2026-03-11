@@ -1,0 +1,15 @@
+# services/notificationapi/overlays/production/configmap-env.yaml
+# PRODUCTION environment configuration for NotificationApi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: notificationapi-env
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  DOTNET_RUNNING_IN_CONTAINER: "true"
+  REDIS_URL: "redis.sampleapi-prod.svc:6379"
+  LOGGING__LOGLEVEL__DEFAULT: "Warning"
+  LOGGING__LOGLEVEL__MICROSOFT_ASPNETCORE: "Warning"
+  # OpenTelemetry tracing (Phase 22) — auto-instrumentation injects OTEL_* env vars
+  # via the Instrumentation CR webhook. No need to set them here.

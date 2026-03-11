@@ -1,0 +1,35 @@
+# argocd/infra-dev.yaml
+# ArgoCD Application: Shared infra (SA, ConfigMap, Secret, PostgreSQL, Redis) in DEV — auto-sync
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: infra-dev
+  namespace: openshift-gitops
+  labels:
+    team: devsecops
+    app: infra
+    environment: dev
+spec:
+  project: devsecops
+  source:
+    repoURL: "https://gitlab-devsecops-gitlab.apps.cluster-pmqwq.pmqwq.sandbox270.opentlc.com/devsecops/app-gitops.git"
+    targetRevision: main
+    path: infra/overlays/dev
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: sampleapi-dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+      - PruneLast=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 1m

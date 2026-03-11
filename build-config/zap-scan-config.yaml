@@ -1,0 +1,111 @@
+# build-config/zap-scan-config.yaml
+# OWASP ZAP scan policy configuration
+# Used by scanOWASPZAP.groovy in T3 (tag) pipeline
+#
+# This defines which scan rules to enable/disable and their thresholds.
+# Reference: https://www.zaproxy.org/docs/desktop/addons/automation-framework/
+
+---
+# ZAP Automation Framework plan
+env:
+  contexts:
+    - name: "SampleAPI"
+      urls:
+        - "https://sampleapi-sampleapi-dev.apps.example.com"  # <-- REPLACE with your cluster's DEV route URL
+      includePaths:
+        - "https://sampleapi-sampleapi-dev.apps.example.com/api/.*"  # <-- REPLACE with your cluster's DEV route URL
+      excludePaths:
+        - "https://sampleapi-sampleapi-dev.apps.example.com/healthz"  # <-- REPLACE with your cluster's DEV route URL
+        - "https://sampleapi-sampleapi-dev.apps.example.com/readyz"  # <-- REPLACE with your cluster's DEV route URL
+      authentication:
+        # No authentication for the sample API
+        method: "none"
+
+  parameters:
+    failOnError: true
+    failOnWarning: false
+    progressToStdout: true
+
+jobs:
+  # Spider the application to discover endpoints
+  - type: spider
+    parameters:
+      context: "SampleAPI"
+      maxDuration: 5       # Minutes
+      maxDepth: 5
+      maxChildren: 10
+
+  # Passive scan (non-intrusive)
+  - type: passiveScan-config
+    parameters:
+      maxAlertsPerRule: 10
+      scanOnlyInScope: true
+      maxBodySizeInBytesToScan: 10000
+
+  # Wait for passive scan to complete
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 5
+
+  # Active scan (intrusive — only in non-production)
+  - type: activeScan
+    parameters:
+      context: "SampleAPI"
+      maxRuleDurationInMins: 5
+      maxScanDurationInMins: 30
+      # Scan policy — focus on OWASP Top 10
+      policy: "Default Policy"
+
+  # Generate reports
+  - type: report
+    parameters:
+      template: "traditional-html"
+      reportDir: "zap-report"
+      reportFile: "zap-report.html"
+    risks:
+      - high
+      - medium
+      - low
+      - info
+
+  - type: report
+    parameters:
+      template: "traditional-json"
+      reportDir: "zap-report"
+      reportFile: "zap-report.json"
+    risks:
+      - high
+      - medium
+      - low
+
+# --- Scan rule configuration ---
+# Disable rules that produce too many false positives on API endpoints
+scanPolicy:
+  name: "SampleAPI-Policy"
+  rules:
+    # Disable: X-Frame-Options (not relevant for REST APIs)
+    - id: 10020
+      threshold: "OFF"
+    # Disable: Content Security Policy (not relevant for REST APIs)
+    - id: 10038
+      threshold: "OFF"
+    # Enable: SQL Injection (critical)
+    - id: 40018
+      threshold: "MEDIUM"
+      strength: "HIGH"
+    # Enable: Cross-Site Scripting (critical)
+    - id: 40012
+      threshold: "MEDIUM"
+      strength: "HIGH"
+    # Enable: Path Traversal
+    - id: 6
+      threshold: "MEDIUM"
+      strength: "MEDIUM"
+    # Enable: Remote File Inclusion
+    - id: 7
+      threshold: "MEDIUM"
+      strength: "MEDIUM"
+    # Enable: Server Side Request Forgery
+    - id: 40046
+      threshold: "MEDIUM"
+      strength: "MEDIUM"

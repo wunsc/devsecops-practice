@@ -1,0 +1,19 @@
+# services/sampleapi/overlays/sit/kustomization.yaml
+# SIT overlay for SampleAPI — 2 replicas
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: sampleapi-sit
+
+resources:
+- ../../base
+- configmap-env.yaml
+- secret-env.yaml
+
+patches:
+- path: patch-deployment.yaml
+
+images:
+- name: sampleapi
+  newName: image-registry.openshift-image-registry.svc:5000/sampleapi-dev/sampleapi
+  newTag: v1.5.1

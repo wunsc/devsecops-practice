@@ -1,0 +1,249 @@
+# infra/phase21/grafana-dashboard-pipeline.yaml
+# GrafanaDashboard CRD — Pipeline Execution Dashboard
+#
+# Visualizes Jenkins CI/CD pipeline health and performance:
+#   - Build success/failure rate over time
+#   - Build duration trends
+#   - Queue wait time
+#   - Stage-level timing (if Jenkins Prometheus plugin exposes stage metrics)
+#
+# DATA SOURCE: Prometheus (Jenkins metrics via Jenkins Prometheus Metrics plugin)
+#
+# NOTE: Requires Jenkins Prometheus Metrics plugin installed in Jenkins.
+# If not available, these panels will show "No data" — install the plugin
+# and configure a ServiceMonitor for Jenkins at /prometheus/ endpoint.
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  name: pipeline-dashboard
+  namespace: devsecops-tools
+  labels:
+    app: grafana
+    team: devsecops
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: "grafana"
+  json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "panels": [
+        {
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+          "id": 100,
+          "title": "Build Overview",
+          "type": "row"
+        },
+        {
+          "title": "Builds (Last 24h)",
+          "type": "stat",
+          "gridPos": { "h": 6, "w": 6, "x": 0, "y": 1 },
+          "id": 1,
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "targets": [
+            {
+              "expr": "sum(increase(jenkins_builds_total[24h]))",
+              "legendFormat": "Total builds"
+            }
+          ]
+        },
+        {
+          "title": "Success Rate (24h)",
+          "type": "gauge",
+          "gridPos": { "h": 6, "w": 6, "x": 6, "y": 1 },
+          "id": 2,
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "targets": [
+            {
+              "expr": "100 * sum(increase(jenkins_builds_total{result=\"SUCCESS\"}[24h])) / sum(increase(jenkins_builds_total[24h]))",
+              "legendFormat": "Success %"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0, "max": 100,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "yellow", "value": 70 },
+                  { "color": "green", "value": 90 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "Failed Builds (24h)",
+          "type": "stat",
+          "gridPos": { "h": 6, "w": 6, "x": 12, "y": 1 },
+          "id": 3,
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "targets": [
+            {
+              "expr": "sum(increase(jenkins_builds_total{result=\"FAILURE\"}[24h]))",
+              "legendFormat": "Failures"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 1 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "Queue Size",
+          "type": "stat",
+          "gridPos": { "h": 6, "w": 6, "x": 18, "y": 1 },
+          "id": 4,
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "targets": [
+            {
+              "expr": "jenkins_queue_size_value",
+              "legendFormat": "Queued"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 3 },
+                  { "color": "red", "value": 10 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 7 },
+          "id": 101,
+          "title": "Build Trends",
+          "type": "row"
+        },
+        {
+          "title": "Build Results Over Time",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+          "id": 5,
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "targets": [
+            {
+              "expr": "sum(increase(jenkins_builds_total{result=\"SUCCESS\"}[1h]))",
+              "legendFormat": "Success"
+            },
+            {
+              "expr": "sum(increase(jenkins_builds_total{result=\"FAILURE\"}[1h]))",
+              "legendFormat": "Failure"
+            },
+            {
+              "expr": "sum(increase(jenkins_builds_total{result=\"UNSTABLE\"}[1h]))",
+              "legendFormat": "Unstable"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": { "custom": { "drawStyle": "bars", "fillOpacity": 80, "stacking": { "mode": "normal" } } },
+            "overrides": [
+              { "matcher": { "id": "byName", "options": "Success" }, "properties": [{ "id": "color", "value": { "fixedColor": "green" } }] },
+              { "matcher": { "id": "byName", "options": "Failure" }, "properties": [{ "id": "color", "value": { "fixedColor": "red" } }] },
+              { "matcher": { "id": "byName", "options": "Unstable" }, "properties": [{ "id": "color", "value": { "fixedColor": "yellow" } }] }
+            ]
+          }
+        },
+        {
+          "title": "Build Duration (avg)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+          "id": 6,
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "targets": [
+            {
+              "expr": "jenkins_builds_duration_milliseconds_summary{quantile=\"0.5\"} / 1000",
+              "legendFormat": "p50"
+            },
+            {
+              "expr": "jenkins_builds_duration_milliseconds_summary{quantile=\"0.99\"} / 1000",
+              "legendFormat": "p99"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": { "unit": "s", "custom": { "drawStyle": "line" } }
+          }
+        },
+        {
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 },
+          "id": 102,
+          "title": "Jenkins Health",
+          "type": "row"
+        },
+        {
+          "title": "Jenkins Controller Pods",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 8, "x": 0, "y": 17 },
+          "id": 7,
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "targets": [
+            {
+              "expr": "kube_deployment_status_available_replicas{namespace=\"devsecops-tools\", deployment=\"jenkins\"}",
+              "legendFormat": "Available"
+            }
+          ]
+        },
+        {
+          "title": "Agent Pods Running",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 8, "x": 8, "y": 17 },
+          "id": 8,
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "targets": [
+            {
+              "expr": "count(kube_pod_info{namespace=\"devsecops-tools\", pod=~\".*agent.*\"})",
+              "legendFormat": "Active agents"
+            }
+          ]
+        },
+        {
+          "title": "Jenkins CPU Usage",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 21 },
+          "id": 9,
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "targets": [
+            {
+              "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"devsecops-tools\", pod=~\"jenkins.*\", container!=\"\"}[5m])) by (pod)",
+              "legendFormat": "{{pod}}"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "line" } } }
+        }
+      ],
+      "refresh": "1m",
+      "schemaVersion": 39,
+      "tags": ["devsecops", "pipeline", "jenkins"],
+      "templating": {
+        "list": [
+          {
+            "name": "datasource",
+            "type": "datasource",
+            "query": "prometheus",
+            "current": { "text": "Prometheus", "value": "Prometheus" }
+          }
+        ]
+      },
+      "time": { "from": "now-24h", "to": "now" },
+      "title": "Pipeline Execution",
+      "uid": "devsecops-pipeline"
+    }

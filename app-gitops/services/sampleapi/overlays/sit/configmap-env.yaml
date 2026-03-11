@@ -1,0 +1,22 @@
+# services/sampleapi/overlays/sit/configmap-env.yaml
+# SIT environment configuration for SampleApi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sampleapi-env
+data:
+  ASPNETCORE_ENVIRONMENT: "Staging"
+  DOTNET_RUNNING_IN_CONTAINER: "true"
+  DATABASE_URL: "Server=postgresql.sampleapi-sit.svc;Database=sampleapi;Port=5432;Username=sampleapi"
+  LOGGING__LOGLEVEL__DEFAULT: "Information"
+  LOGGING__LOGLEVEL__MICROSOFT_ASPNETCORE: "Warning"
+  FEATURE_SWAGGER_ENABLED: "true"
+  CORS_ALLOWED_ORIGINS: "https://frontend-sit.apps.cluster-pmqwq.pmqwq.sandbox270.opentlc.com"
+  WeatherForecast__Location: "SIT"
+  WeatherForecast__ForecastDays: "5"
+  REDIS_URL: "redis.sampleapi-sit.svc:6379"
+  NOTIFICATION_API_URL: "http://notificationapi.sampleapi-sit.svc:8081"
+  EF_MIGRATE_ON_STARTUP: "false"
+  # OpenTelemetry tracing (Phase 22) — auto-instrumentation injects OTEL_* env vars
+  # via the Instrumentation CR webhook. No need to set them here.

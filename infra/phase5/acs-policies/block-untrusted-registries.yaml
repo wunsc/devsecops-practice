@@ -1,0 +1,73 @@
+# infra/phase5/acs-policies/block-untrusted-registries.yaml
+# Deploy-time policy: Only allow images from trusted registries
+# Prevents pulling images from unknown/public registries into app namespaces
+# Trusted registries: OCP internal registry, Red Hat registries
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: acs-policy-block-untrusted-registries
+  namespace: stackrox
+  labels:
+    team: devsecops
+    acs-policy: "true"
+    policy-lifecycle: deploy
+  annotations:
+    description: |
+      Only allow images from trusted registries in application namespaces.
+      Trusted: OCP internal registry, registry.redhat.io, registry.access.redhat.com
+      This prevents supply chain attacks via untrusted base images.
+data:
+  policy.json: |
+    {
+      "name": "Block Untrusted Registries",
+      "description": "Only allow container images from trusted registries in application namespaces. Blocks images from Docker Hub, Quay.io (public), and other untrusted sources.",
+      "rationale": "Untrusted registries may host compromised or malicious images. Only vetted images from approved registries should be deployed.",
+      "remediation": "Use images from the OCP internal registry (image-registry.openshift-image-registry.svc:5000) or Red Hat registries (registry.redhat.io, registry.access.redhat.com).",
+      "categories": ["Supply Chain Security"],
+      "lifecycleStages": ["DEPLOY"],
+      "severity": "HIGH_SEVERITY",
+      "enforcementActions": ["SCALE_TO_ZERO_ENFORCEMENT"],
+      "disabled": false,
+      "policySections": [
+        {
+          "sectionName": "Trusted Registry Allow List",
+          "policyGroups": [
+            {
+              "fieldName": "Image Registry",
+              "negate": true,
+              "values": [
+                {
+                  "value": "image-registry.openshift-image-registry.svc:5000"
+                },
+                {
+                  "value": "registry.redhat.io"
+                },
+                {
+                  "value": "registry.access.redhat.com"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "scope": [
+        {
+          "cluster": "",
+          "namespace": "sampleapi-dev"
+        },
+        {
+          "cluster": "",
+          "namespace": "sampleapi-sit"
+        },
+        {
+          "cluster": "",
+          "namespace": "sampleapi-uat"
+        },
+        {
+          "cluster": "",
+          "namespace": "sampleapi-prod"
+        }
+      ],
+      "exclusions": []
+    }

@@ -1,0 +1,38 @@
+# app-source/.gitleaks.toml
+# Gitleaks configuration for secret detection in pre-commit hooks
+# Prevents accidental commit of passwords, API keys, tokens, etc.
+
+title = "SampleAPI Gitleaks Config"
+
+# Use the default rules plus custom allowlist
+[extend]
+useDefault = true
+
+# Allowlist — suppress known false positives
+[allowlist]
+  description = "Global allowlist for known false positives"
+
+  # Jenkins credential ID strings are not secrets — they're just identifiers
+  # e.g., 'gitlab-api-token', 'sonarqube-token' in documentation
+  regexes = [
+    '''credential[sI][dD]?\s*[:=]\s*['\"][\w-]+['\"]''',
+  ]
+
+  # Files that are known to not contain real secrets
+  paths = [
+    '''appsettings\.json$''',
+    '''appsettings\.\w+\.json$''',
+    '''\.csproj$''',
+    '''\.sln$''',
+  ]
+
+# Additional rules for .NET-specific patterns
+[[rules]]
+  id = "dotnet-connection-string"
+  description = "Connection string with embedded password"
+  regex = '''(?i)(password|pwd)\s*=\s*[^\s;]{8,}'''
+  tags = ["dotnet", "connection-string"]
+
+  [rules.allowlist]
+    # Allow example/placeholder connection strings in appsettings
+    regexes = ['''CHANGE_ME''', '''<.*>''', '''placeholder''', '''example''']

@@ -1,0 +1,10 @@
+# infra/overlays/uat/kustomization.yaml
+# UAT infra: ServiceAccount, PostgreSQL, Redis + infra-secret
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: sampleapi-uat
+
+resources:
+- ../../base
+- secret-env.yaml

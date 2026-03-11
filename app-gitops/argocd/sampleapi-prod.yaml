@@ -1,0 +1,31 @@
+# argocd/sampleapi-prod.yaml
+# ArgoCD Application: SampleAPI in PRODUCTION — manual sync
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sampleapi-prod
+  namespace: openshift-gitops
+  labels:
+    team: devsecops
+    app: sampleapi
+    environment: production
+spec:
+  project: devsecops
+  source:
+    repoURL: "https://gitlab-devsecops-gitlab.apps.cluster-pmqwq.pmqwq.sandbox270.opentlc.com/devsecops/app-gitops.git"
+    targetRevision: main
+    path: services/sampleapi/overlays/production
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: sampleapi-prod
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=false
+      - PruneLast=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 1m

@@ -1,0 +1,63 @@
+# infra/phase21/grafana-sa-clusterrolebinding.yaml
+# Grant Grafana SA read access to Prometheus/Thanos metrics.
+#
+# cluster-monitoring-view: allows reading metrics from all namespaces
+#   via the Thanos Querier endpoint. This is required because Grafana
+#   queries metrics across multiple namespaces (sampleapi-dev, -sit, -uat, -prod).
+#
+# logging-view-logs: allows reading logs from LokiStack (for Loki datasource).
+#   This ClusterRole is created by the Loki Operator.
+#
+# APPLY:
+#   oc apply -f grafana-sa-clusterrolebinding.yaml
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: grafana-cluster-monitoring-view
+  labels:
+    app: grafana
+    team: devsecops
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-monitoring-view
+subjects:
+  - kind: ServiceAccount
+    name: grafana-sa
+    namespace: devsecops-tools
+---
+# ClusterRole for Loki application log access (NOT created by Loki Operator in 6.x)
+# In Logging 6.x, the LokiStack gateway checks RBAC via SubjectAccessReview
+# on the loki.grafana.com API group, resource "application", verb "get".
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cluster-logging-application-view
+  labels:
+    app: grafana
+    team: devsecops
+rules:
+  - apiGroups:
+      - loki.grafana.com
+    resources:
+      - application
+    verbs:
+      - get
+---
+# Grant Grafana SA read access to application logs in LokiStack
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: grafana-logging-view
+  labels:
+    app: grafana
+    team: devsecops
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-logging-application-view
+subjects:
+  - kind: ServiceAccount
+    name: grafana-sa
+    namespace: devsecops-tools

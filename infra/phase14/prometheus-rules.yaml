@@ -1,0 +1,185 @@
+# infra/phase14/prometheus-rules.yaml
+# PrometheusRule for SampleAPI alerting
+#
+# Defines alert rules for:
+#   - High error rate (5xx responses)
+#   - High latency (p99 > threshold)
+#   - Pod restarts (CrashLoopBackOff detection)
+#   - Pod not ready
+#   - High CPU/memory usage
+#   - Deployment replica mismatch
+#
+# APPLY TO: each application namespace
+#   oc apply -f prometheus-rules.yaml -n sampleapi-dev
+#   oc apply -f prometheus-rules.yaml -n sampleapi-prod
+#
+# VERIFY:
+#   oc get prometheusrule -n sampleapi-dev
+#   # Check alerts in OCP Console → Observe → Alerting
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: sampleapi-alerts
+  labels:
+    app: sampleapi
+    team: devsecops
+    # Required for user workload monitoring
+    app.kubernetes.io/part-of: sampleapi
+spec:
+  groups:
+    # =====================================================
+    # Application Health Alerts
+    # =====================================================
+    - name: sampleapi.application.rules
+      rules:
+        # --- High Error Rate ---
+        # Fires when > 5% of requests return 5xx in the last 5 minutes
+        - alert: SampleAPIHighErrorRate
+          expr: |
+            (
+              sum(rate(http_requests_received_total{job="sampleapi", code=~"5.."}[5m]))
+              /
+              sum(rate(http_requests_received_total{job="sampleapi"}[5m]))
+            ) > 0.05
+          for: 5m
+          labels:
+            severity: critical
+            team: devsecops
+            app: sampleapi
+          annotations:
+            summary: "High error rate on SampleAPI"
+            description: "More than 5% of HTTP requests are returning 5xx errors for the last 5 minutes. Current error rate: {{ $value | humanizePercentage }}"
+            runbook: "Check application logs: oc logs -l app=sampleapi --tail=100"
+
+        # --- High Latency ---
+        # Fires when p99 latency exceeds 2 seconds
+        - alert: SampleAPIHighLatency
+          expr: |
+            histogram_quantile(0.99,
+              sum(rate(http_request_duration_seconds_bucket{job="sampleapi"}[5m])) by (le)
+            ) > 2.0
+          for: 10m
+          labels:
+            severity: warning
+            team: devsecops
+            app: sampleapi
+          annotations:
+            summary: "High p99 latency on SampleAPI"
+            description: "99th percentile latency is above 2 seconds for the last 10 minutes. Current p99: {{ $value | humanizeDuration }}"
+            runbook: "Check for slow database queries, external service timeouts, or resource exhaustion."
+
+    # =====================================================
+    # Pod Health Alerts
+    # =====================================================
+    - name: sampleapi.pod.rules
+      rules:
+        # --- Pod Restarts ---
+        # Fires when a pod has restarted more than 3 times in 15 minutes
+        - alert: SampleAPIPodRestarting
+          expr: |
+            increase(kube_pod_container_status_restarts_total{container="sampleapi"}[15m]) > 3
+          for: 5m
+          labels:
+            severity: critical
+            team: devsecops
+            app: sampleapi
+          annotations:
+            summary: "SampleAPI pod is restarting frequently"
+            description: "Pod {{ $labels.pod }} has restarted {{ $value }} times in the last 15 minutes. This may indicate a CrashLoopBackOff."
+            runbook: "1. oc describe pod {{ $labels.pod }}\n2. oc logs {{ $labels.pod }} --previous\n3. Check liveness/readiness probe configuration"
+
+        # --- Pod Not Ready ---
+        # Fires when a pod is not ready for more than 5 minutes
+        - alert: SampleAPIPodNotReady
+          expr: |
+            kube_pod_status_ready{condition="true", pod=~"sampleapi.*"} == 0
+          for: 5m
+          labels:
+            severity: warning
+            team: devsecops
+            app: sampleapi
+          annotations:
+            summary: "SampleAPI pod is not ready"
+            description: "Pod {{ $labels.pod }} has been in a non-ready state for more than 5 minutes."
+            runbook: "1. oc describe pod {{ $labels.pod }}\n2. Check readiness probe: GET /readyz\n3. Check events: oc get events --sort-by='.lastTimestamp'"
+
+    # =====================================================
+    # Resource Usage Alerts
+    # =====================================================
+    - name: sampleapi.resources.rules
+      rules:
+        # --- High CPU Usage ---
+        # Fires when CPU usage exceeds 80% of limit for 10 minutes
+        - alert: SampleAPIHighCPU
+          expr: |
+            (
+              sum(rate(container_cpu_usage_seconds_total{container="sampleapi"}[5m])) by (pod)
+              /
+              sum(kube_pod_container_resource_limits{container="sampleapi", resource="cpu"}) by (pod)
+            ) > 0.80
+          for: 10m
+          labels:
+            severity: warning
+            team: devsecops
+            app: sampleapi
+          annotations:
+            summary: "SampleAPI pod high CPU usage"
+            description: "Pod {{ $labels.pod }} CPU usage is above 80% of its limit for the last 10 minutes. Current: {{ $value | humanizePercentage }}"
+            runbook: "Consider increasing CPU limits in the Kustomize overlay patch-deployment.yaml"
+
+        # --- High Memory Usage ---
+        # Fires when memory usage exceeds 85% of limit
+        - alert: SampleAPIHighMemory
+          expr: |
+            (
+              sum(container_memory_working_set_bytes{container="sampleapi"}) by (pod)
+              /
+              sum(kube_pod_container_resource_limits{container="sampleapi", resource="memory"}) by (pod)
+            ) > 0.85
+          for: 10m
+          labels:
+            severity: warning
+            team: devsecops
+            app: sampleapi
+          annotations:
+            summary: "SampleAPI pod high memory usage"
+            description: "Pod {{ $labels.pod }} memory usage is above 85% of its limit. Current: {{ $value | humanizePercentage }}. OOMKill risk."
+            runbook: "Check for memory leaks. Consider increasing memory limits in patch-deployment.yaml."
+
+    # =====================================================
+    # Deployment Health Alerts
+    # =====================================================
+    - name: sampleapi.deployment.rules
+      rules:
+        # --- Replica Mismatch ---
+        # Fires when desired replicas != available replicas for 10 minutes
+        - alert: SampleAPIReplicaMismatch
+          expr: |
+            kube_deployment_spec_replicas{deployment="sampleapi"}
+            !=
+            kube_deployment_status_replicas_available{deployment="sampleapi"}
+          for: 10m
+          labels:
+            severity: warning
+            team: devsecops
+            app: sampleapi
+          annotations:
+            summary: "SampleAPI deployment replica mismatch"
+            description: "Deployment sampleapi has {{ $labels.namespace }} desired replicas != available replicas for 10 minutes. Check for scheduling issues or resource constraints."
+            runbook: "1. oc get deployment sampleapi\n2. oc get events --sort-by='.lastTimestamp'\n3. oc describe nodes (check resource pressure)"
+
+        # --- No Available Replicas ---
+        # Fires when zero replicas are available (complete outage)
+        - alert: SampleAPIDown
+          expr: |
+            kube_deployment_status_replicas_available{deployment="sampleapi"} == 0
+          for: 2m
+          labels:
+            severity: critical
+            team: devsecops
+            app: sampleapi
+          annotations:
+            summary: "SampleAPI is DOWN — zero available replicas"
+            description: "Deployment sampleapi in namespace {{ $labels.namespace }} has zero available replicas. The application is completely unavailable."
+            runbook: "IMMEDIATE ACTION:\n1. oc get pods -l app=sampleapi\n2. oc describe deployment sampleapi\n3. oc get events --sort-by='.lastTimestamp'\n4. Check ArgoCD sync status"

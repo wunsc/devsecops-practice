@@ -1,0 +1,127 @@
+# infra/phase14/acs-notifier-config.yaml
+# ACS (StackRox) notification channel configuration
+#
+# Defines how ACS alerts are sent to external systems (email, Slack, webhook).
+# These are configured via the ACS Central API or UI.
+#
+# APPLY: Use the ACS Central API to create notifiers:
+#   curl -sk -X POST \
+#     -H "Authorization: Bearer ${ACS_API_TOKEN}" \
+#     -H "Content-Type: application/json" \
+#     -d @acs-notifier-config.yaml \
+#     ${ACS_CENTRAL_URL}/v1/notifiers
+#
+# Or configure via ACS Central UI:
+#   Platform Configuration → Integrations → Notifier Integrations
+#
+# NOTE: This file documents the notifier configuration as YAML.
+#       The actual ACS API expects JSON — convert before POSTing.
+---
+# Email Notifier — sends alerts to the DevSecOps team
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: acs-notifier-config
+  namespace: devsecops-tools
+  labels:
+    team: devsecops
+    app: acs
+    component: notifiers
+data:
+  # Email notifier configuration (for ACS Central API)
+  email-notifier.json: |
+    {
+      "name": "DevSecOps Email",
+      "type": "email",
+      "labelDefault": "devsecops-alerts@example.com",
+      "labelKey": "",
+      "email": {
+        "server": "smtp.example.com",
+        "port": 587,
+        "sender": "acs-alerts@example.com",
+        "username": "acs-alerts@example.com",
+        "password": "",
+        "startTLSAuthMethod": "PLAIN",
+        "disableTLS": false,
+        "DEV_ONLY_disable_tls_cert_verification": true
+      },
+      "uiEndpoint": "central-stackrox.apps.cluster-pmqwq.pmqwq.sandbox270.opentlc.com"
+    }
+
+  # Slack notifier configuration (for ACS Central API)
+  # Replace WEBHOOK_URL with actual Slack incoming webhook URL
+  slack-notifier.json: |
+    {
+      "name": "DevSecOps Slack",
+      "type": "slack",
+      "labelDefault": "#devsecops-alerts",
+      "labelKey": "",
+      "slack": {
+        "webhook": "https://hooks.slack.com/services/REPLACE/WITH/ACTUAL_WEBHOOK"
+      },
+      "uiEndpoint": "central-stackrox.apps.cluster-pmqwq.pmqwq.sandbox270.opentlc.com"
+    }
+
+  # Generic webhook notifier (for custom integrations)
+  # Can send alerts to any HTTP endpoint (PagerDuty, ServiceNow, etc.)
+  webhook-notifier.json: |
+    {
+      "name": "DevSecOps Webhook",
+      "type": "generic",
+      "labelDefault": "",
+      "labelKey": "",
+      "generic": {
+        "endpoint": "https://webhook.example.com/acs-alerts",
+        "skipTLSVerify": true,
+        "caCert": "",
+        "username": "",
+        "password": "",
+        "headers": [
+          {
+            "key": "X-Source",
+            "value": "acs-stackrox"
+          },
+          {
+            "key": "X-Team",
+            "value": "devsecops"
+          }
+        ],
+        "extraFields": [
+          {
+            "key": "cluster",
+            "value": "ocp-sandbox"
+          },
+          {
+            "key": "environment",
+            "value": "all"
+          }
+        ]
+      },
+      "uiEndpoint": "central-stackrox.apps.cluster-pmqwq.pmqwq.sandbox270.opentlc.com"
+    }
+
+  # Instructions for setting up ACS notifiers
+  setup-instructions: |
+    ACS Notifier Setup Instructions
+    ================================
+
+    Option A: Via ACS Central UI
+    1. Login to ACS Central
+    2. Go to Platform Configuration > Integrations
+    3. Under Notifier Integrations, click the desired type (Email, Slack, etc.)
+    4. Fill in the configuration values from the JSON files above
+    5. Test the integration
+    6. Save
+
+    Option B: Via ACS Central API
+    1. Generate an API token in ACS Central (Platform Configuration > Integrations > API Token)
+    2. For each notifier JSON file:
+       curl -sk -X POST \
+         -H "Authorization: Bearer ${ACS_API_TOKEN}" \
+         -H "Content-Type: application/json" \
+         -d @email-notifier.json \
+         https://central-stackrox.apps.cluster-pmqwq.pmqwq.sandbox270.opentlc.com/v1/notifiers
+
+    After creating notifiers, associate them with policies:
+    - Go to Policy Management > select policy > Edit > Actions > add notifier
+    - Or via API: PATCH /v1/policies/{id} with notifiers array

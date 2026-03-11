@@ -1,0 +1,86 @@
+# infra/phase17/networkpolicies/allow-router-notification.yaml
+# Allow ingress from OpenShift Router (HAProxy) to NotificationApi pods
+# Required for external HTTPS traffic via OpenShift Routes to NotificationApi
+# Same pattern as Phase 1 allow-ingress-router.yaml but targeting notificationapi
+# Applied to: sampleapi-dev, sampleapi-sit, sampleapi-uat, sampleapi-prod
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-router-to-notificationapi
+  namespace: sampleapi-dev
+  labels:
+    team: devsecops
+    policy: allow-router-notificationapi
+spec:
+  podSelector:
+    matchLabels:
+      app: notificationapi  # Target: NotificationApi pods only
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              # OCP router namespace label (set by default on openshift-ingress)
+              policy-group.network.openshift.io/ingress: ""
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-router-to-notificationapi
+  namespace: sampleapi-sit
+  labels:
+    team: devsecops
+    policy: allow-router-notificationapi
+spec:
+  podSelector:
+    matchLabels:
+      app: notificationapi
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              policy-group.network.openshift.io/ingress: ""
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-router-to-notificationapi
+  namespace: sampleapi-uat
+  labels:
+    team: devsecops
+    policy: allow-router-notificationapi
+spec:
+  podSelector:
+    matchLabels:
+      app: notificationapi
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              policy-group.network.openshift.io/ingress: ""
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-router-to-notificationapi
+  namespace: sampleapi-prod
+  labels:
+    team: devsecops
+    policy: allow-router-notificationapi
+spec:
+  podSelector:
+    matchLabels:
+      app: notificationapi
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              policy-group.network.openshift.io/ingress: ""
+  policyTypes:
+    - Ingress

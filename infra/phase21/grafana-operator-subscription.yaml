@@ -1,0 +1,32 @@
+# infra/phase21/grafana-operator-subscription.yaml
+# Grafana Operator v5 — manages Grafana instances, datasources, and dashboards via CRDs.
+#
+# WHY Grafana Operator (not manual Grafana Helm install):
+#   - GrafanaDashboard CRDs allow dashboards-as-code (versioned in Git, synced by ArgoCD)
+#   - GrafanaDatasource CRDs manage datasource config declaratively
+#   - Operator handles upgrades, persistence, and OAuth proxy integration
+#
+# NOTE: The community Grafana Operator (grafana-operator) is used here because
+#       Red Hat does not ship a supported Grafana Operator. OCP Console has a built-in
+#       Observe section, but it lacks custom dashboard flexibility.
+#
+# INSTALL TO: devsecops-tools namespace (alongside Jenkins and SonarQube)
+#
+# APPLY:
+#   oc apply -f grafana-operator-subscription.yaml
+#
+# VERIFY:
+#   oc get csv -n devsecops-tools | grep grafana
+#   # Expected: grafana-operator.v5.x.y — Succeeded
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: grafana-operator
+  namespace: devsecops-tools
+spec:
+  channel: v5
+  installPlanApproval: Automatic
+  name: grafana-operator
+  source: community-operators
+  sourceNamespace: openshift-marketplace

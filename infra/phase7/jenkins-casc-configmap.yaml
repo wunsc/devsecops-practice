@@ -1,0 +1,407 @@
+# infra/phase7/jenkins-casc-configmap.yaml
+# Jenkins Configuration as Code (JCasC) — global config + service pipeline jobs
+#
+# ARCHITECTURE: Service-parameterized pipelines
+#   Each service gets 3 jobs: {service}-mr, {service}-merge, {service}-tag
+#   Each job passes service: '{service}' to the shared library orchestrator.
+#   Adding a new service = copy a service block + adjust service name and repo URL.
+#
+# KNOWN FIXES:
+#   - NEVER define credentials in JCasC where ID matches casc_secrets/ filename
+#     (causes circular resolution on reload -> empty values)
+#   - Manage credentials via Script Console instead
+#   - gitlabPush trigger has NO buildOnTagPushEvents() method
+#   - Anonymous must have Overall/Read + Job/Read + Job/Build for GitLab webhooks
+#   - Tag pipeline uses inline CPS (not cpsScm) — checkoutSource handles tag checkout
+#   - Duplicate definition{} blocks are invalid in Job DSL
+#
+# ADDING A NEW SERVICE:
+#   1. Copy the "SERVICE: sampleapi" block (3 jobs)
+#   2. Replace 'sampleapi' with your service name
+#   3. Replace the repo URL with your service's GitLab repo URL
+#   4. Add configureForService() case in PipelineConfig.groovy
+#   5. Create webhooks on the new service's GitLab repo (see setup-webhooks.sh)
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jenkins-casc-config
+  namespace: devsecops-tools
+  labels:
+    team: devsecops
+    app: jenkins
+data:
+  casc.yaml: |
+    # =============================================================
+    # Jenkins Configuration as Code
+    # =============================================================
+
+    jenkins:
+      systemMessage: "DevSecOps CI/CD — Managed by JCasC"
+      numExecutors: 0  # No builds on controller — use agent pods only
+      mode: EXCLUSIVE
+
+      # --- Security Realm ---
+      securityRealm:
+        local:
+          allowsSignup: false
+          users:
+            - id: "admin"
+              password: "${JENKINS_ADMIN_PASSWORD:-DevSec0ps-Jenkins-2024}"
+
+      # --- Authorization ---
+      # Matrix auth: admin gets full access, anonymous gets read + build
+      # Anonymous access is required for GitLab webhooks hitting /project/<job>
+      authorizationStrategy:
+        globalMatrix:
+          permissions:
+            - "Overall/Administer:admin"
+            - "Overall/Read:anonymous"
+            - "Job/Read:anonymous"
+            - "Job/Build:anonymous"
+
+      # --- Kubernetes Cloud (ephemeral agents) ---
+      clouds:
+        - kubernetes:
+            name: "openshift"
+            serverUrl: "https://kubernetes.default.svc"
+            namespace: "devsecops-tools"
+            jenkinsUrl: "http://jenkins.devsecops-tools.svc:8080"
+            jenkinsTunnel: "jenkins.devsecops-tools.svc:50000"
+            # Pod templates defined separately for clarity
+            templates:
+              - name: "devsecops-agent"
+                label: "devsecops-agent"
+                serviceAccount: "jenkins-sa"
+                nodeUsageMode: NORMAL
+                # Idle timeout — terminate agent pod after 10 min idle
+                idleMinutes: 10
+                containers:
+                  - name: "jnlp"
+                    image: "image-registry.openshift-image-registry.svc:5000/devsecops-tools/jenkins-agent-devsecops:latest"
+                    workingDir: "/home/jenkins/agent"
+                    ttyEnabled: true
+                    alwaysPullImage: true
+                    resourceRequestCpu: "500m"
+                    resourceRequestMemory: "1Gi"
+                    resourceLimitCpu: "2"
+                    resourceLimitMemory: "4Gi"
+                    # Privileged for Podman builds
+                    privileged: true
+                envVars:
+                  - envVar:
+                      key: "STORAGE_DRIVER"
+                      value: "vfs"
+                  - envVar:
+                      key: "DOTNET_CLI_TELEMETRY_OPTOUT"
+                      value: "1"
+                  - envVar:
+                      key: "DOTNET_NOLOGO"
+                      value: "true"
+                volumes:
+                  # Temp storage for builds
+                  - emptyDirVolume:
+                      mountPath: "/tmp"
+                      memory: false
+                  # Podman storage (vfs)
+                  - emptyDirVolume:
+                      mountPath: "/var/lib/containers"
+                      memory: false
+                yaml: |
+                  spec:
+                    securityContext:
+                      runAsUser: 0
+
+    # --- Global Tool Configuration ---
+    tool:
+      git:
+        installations:
+          - name: "git"
+            home: "/usr/bin/git"
+
+    # --- Unclassified (global settings) ---
+    unclassified:
+      # GitLab connection for MR status reporting
+      gitLabConnectionConfig:
+        connections:
+          - name: "gitlab"
+            url: "https://gitlab-devsecops-gitlab.apps.cluster-pmqwq.pmqwq.sandbox270.opentlc.com"
+            apiTokenId: "gitlab-api-token"
+            clientBuilderId: "autodetect"
+            ignoreCertificateErrors: true
+            connectionTimeout: 10
+            readTimeout: 10
+      # Shared Library
+      globalLibraries:
+        libraries:
+          - name: "devsecops-shared-lib"
+            defaultVersion: "main"
+            implicit: false
+            retriever:
+              modernSCM:
+                scm:
+                  git:
+                    remote: "https://gitlab-devsecops-gitlab.apps.cluster-pmqwq.pmqwq.sandbox270.opentlc.com/devsecops/jenkins-shared-lib.git"
+                    credentialsId: "gitlab-token"
+      location:
+        url: "https://jenkins-devsecops-tools.apps.cluster-pmqwq.pmqwq.sandbox270.opentlc.com/"
+        adminAddress: "devsecops@example.com"
+
+  # =============================================================
+  # Job Definitions — Service-Parameterized Pattern
+  # =============================================================
+  #
+  # PATTERN: Each service gets 3 pipeline jobs:
+  #   {service}-mr     -> pipelineMR(service: '{service}')
+  #   {service}-merge  -> pipelineMerge(service: '{service}')
+  #   {service}-tag    -> pipelineTag(service: '{service}')
+  #
+  # Plus one shared T4 job for GitOps promotion (watches app-gitops repo).
+  #
+  # TO ADD A NEW SERVICE: Copy a service block, change service name + repo URL.
+  # =============================================================
+  jobs.yaml: |
+    jobs:
+      # ══════════════════════════════════════════════════════════
+      # SERVICE: sampleapi
+      # Repo: devsecops/app-source
+      # Jobs: sampleapi-mr, sampleapi-merge, sampleapi-tag
+      # ══════════════════════════════════════════════════════════
+
+      # --- T1: SampleApi MR Validation ---
+      - script: |
+          pipelineJob('sampleapi-mr') {
+            description('T1: MR Validation for SampleApi — unit tests, SAST, SCA')
+            displayName('[SampleApi] MR Validation')
+            properties {
+              gitLabConnection { gitLabConnection('gitlab') }
+            }
+            triggers {
+              gitlabPush {
+                buildOnMergeRequestEvents(true)
+                buildOnPushEvents(false)
+                enableCiSkip(true)
+                setBuildDescription(true)
+                rebuildOpenMergeRequest('source')
+              }
+            }
+            definition {
+              cps {
+                script("""\
+                  @Library('devsecops-shared-lib@main') _
+                  pipelineMR(service: 'sampleapi')
+                """.stripIndent())
+                sandbox(true)
+              }
+            }
+            logRotator { numToKeep(20) }
+          }
+
+      # --- T2: SampleApi Merge to Main ---
+      - script: |
+          pipelineJob('sampleapi-merge') {
+            description('T2: Merge to Main for SampleApi — build, scan, push, deploy DEV')
+            displayName('[SampleApi] Merge to Main')
+            properties {
+              gitLabConnection { gitLabConnection('gitlab') }
+            }
+            triggers {
+              gitlabPush {
+                buildOnMergeRequestEvents(false)
+                buildOnPushEvents(true)
+                enableCiSkip(true)
+                setBuildDescription(true)
+                includeBranches('main')
+              }
+            }
+            definition {
+              cps {
+                script("""\
+                  @Library('devsecops-shared-lib@main') _
+                  pipelineMerge(service: 'sampleapi')
+                """.stripIndent())
+                sandbox(true)
+              }
+            }
+            logRotator { numToKeep(30) }
+          }
+
+      # --- T3: SampleApi Tag Release ---
+      - script: |
+          pipelineJob('sampleapi-tag') {
+            description('T3: Tag Release for SampleApi — full validation + DAST, release image')
+            displayName('[SampleApi] Tag Release')
+            properties {
+              gitLabConnection { gitLabConnection('gitlab') }
+            }
+            // KNOWN FIX: GitLab plugin 1.9.x has no triggerOnTagPushEvent field.
+            // Tag pushes arrive as push events with ref=refs/tags/...
+            // Use configure block to set triggerOnPush=true for tag push webhooks.
+            // The pipeline itself validates the tag name (isValidSemver).
+            configure { project ->
+              project / triggers / 'com.dabsquared.gitlabjenkins.GitLabPushTrigger' {
+                spec('')
+                triggerOnPush(true)
+                triggerOnMergeRequest(false)
+                triggerOpenMergeRequestOnPush('never')
+                ciSkip(true)
+                setBuildDescription(true)
+                branchFilterType('RegexBasedFilter')
+                sourceBranchRegex('refs/tags/.*')
+              }
+            }
+            definition {
+              cps {
+                script("""\
+                  @Library('devsecops-shared-lib@main') _
+                  pipelineTag(service: 'sampleapi')
+                """.stripIndent())
+                sandbox(true)
+              }
+            }
+            logRotator { numToKeep(20) }
+          }
+
+      # ══════════════════════════════════════════════════════════
+      # SERVICE: notificationapi
+      # Repo: devsecops/notificationapi-source
+      # Jobs: notificationapi-mr, notificationapi-merge, notificationapi-tag
+      #
+      # COPY OF: sampleapi block above with service name changed.
+      # configureForService('notificationapi') in PipelineConfig sets:
+      #   activeSourceRepo  = .../notificationapi-source.git
+      #   activeImageName   = notificationapi
+      #   activeBuildArgs   = [PROJECT_NAME: 'NotificationApi', APP_PORT: '8081']
+      # ══════════════════════════════════════════════════════════
+
+      # --- T1: NotificationApi MR Validation ---
+      - script: |
+          pipelineJob('notificationapi-mr') {
+            description('T1: MR Validation for NotificationApi — unit tests, SAST, SCA')
+            displayName('[NotificationApi] MR Validation')
+            properties {
+              gitLabConnection { gitLabConnection('gitlab') }
+            }
+            triggers {
+              gitlabPush {
+                buildOnMergeRequestEvents(true)
+                buildOnPushEvents(false)
+                enableCiSkip(true)
+                setBuildDescription(true)
+                rebuildOpenMergeRequest('source')
+              }
+            }
+            definition {
+              cps {
+                script("""\
+                  @Library('devsecops-shared-lib@main') _
+                  pipelineMR(service: 'notificationapi')
+                """.stripIndent())
+                sandbox(true)
+              }
+            }
+            logRotator { numToKeep(20) }
+          }
+
+      # --- T2: NotificationApi Merge to Main ---
+      - script: |
+          pipelineJob('notificationapi-merge') {
+            description('T2: Merge to Main for NotificationApi — build, scan, push, deploy DEV')
+            displayName('[NotificationApi] Merge to Main')
+            properties {
+              gitLabConnection { gitLabConnection('gitlab') }
+            }
+            triggers {
+              gitlabPush {
+                buildOnMergeRequestEvents(false)
+                buildOnPushEvents(true)
+                enableCiSkip(true)
+                setBuildDescription(true)
+                includeBranches('main')
+              }
+            }
+            definition {
+              cps {
+                script("""\
+                  @Library('devsecops-shared-lib@main') _
+                  pipelineMerge(service: 'notificationapi')
+                """.stripIndent())
+                sandbox(true)
+              }
+            }
+            logRotator { numToKeep(30) }
+          }
+
+      # --- T3: NotificationApi Tag Release ---
+      - script: |
+          pipelineJob('notificationapi-tag') {
+            description('T3: Tag Release for NotificationApi — full validation + DAST, release image')
+            displayName('[NotificationApi] Tag Release')
+            properties {
+              gitLabConnection { gitLabConnection('gitlab') }
+            }
+            // KNOWN FIX: GitLab plugin 1.9.x has no triggerOnTagPushEvent field.
+            // Tag pushes arrive as push events with ref=refs/tags/...
+            // Use configure block to set triggerOnPush=true for tag push webhooks.
+            // The pipeline itself validates the tag name (isValidSemver).
+            configure { project ->
+              project / triggers / 'com.dabsquared.gitlabjenkins.GitLabPushTrigger' {
+                spec('')
+                triggerOnPush(true)
+                triggerOnMergeRequest(false)
+                triggerOpenMergeRequestOnPush('never')
+                ciSkip(true)
+                setBuildDescription(true)
+                branchFilterType('RegexBasedFilter')
+                sourceBranchRegex('refs/tags/.*')
+              }
+            }
+            definition {
+              cps {
+                script("""\
+                  @Library('devsecops-shared-lib@main') _
+                  pipelineTag(service: 'notificationapi')
+                """.stripIndent())
+                sandbox(true)
+              }
+            }
+            logRotator { numToKeep(20) }
+          }
+
+      # ══════════════════════════════════════════════════════════
+      # SHARED: T4 GitOps Promotion Pipeline
+      # Repo: devsecops/app-gitops (shared across all services)
+      # Job: sampleapi-promote
+      #
+      # This job watches app-gitops repo. When an overlay is changed
+      # (via promotion MR merge), it detects which environment changed
+      # and syncs the corresponding ArgoCD application.
+      # One job handles all services — overlay changes are per-env.
+      # ══════════════════════════════════════════════════════════
+      - script: |
+          pipelineJob('sampleapi-promote') {
+            description('T4: GitOps Promotion — ArgoCD sync triggered by MR merge on app-gitops')
+            displayName('[Shared] GitOps Promotion')
+            properties {
+              gitLabConnection { gitLabConnection('gitlab') }
+            }
+            triggers {
+              gitlabPush {
+                buildOnMergeRequestEvents(false)
+                buildOnPushEvents(true)
+                enableCiSkip(true)
+                setBuildDescription(true)
+                includeBranches('main')
+              }
+            }
+            definition {
+              cps {
+                script("""\
+                  @Library('devsecops-shared-lib@main') _
+                  pipelinePromote()
+                """.stripIndent())
+                sandbox(true)
+              }
+            }
+            logRotator { numToKeep(30) }
+          }

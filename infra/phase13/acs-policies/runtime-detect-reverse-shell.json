@@ -1,0 +1,102 @@
+{
+  "_comment": "infra/phase13/acs-policies/runtime-detect-reverse-shell.json",
+  "_comment2": "ACS Runtime policy: detect reverse shell and interactive shell activity",
+  "_comment3": "Action: kill pod immediately for reverse shell, alert for interactive shell",
+  "policies": [
+    {
+      "name": "DevSecOps - Detect Reverse Shell (Runtime)",
+      "description": "Detects reverse shell patterns (bash/sh with /dev/tcp, nc/ncat with -e flag, python/perl reverse shell patterns) and kills the pod. Also detects interactive shell sessions (/bin/bash, /bin/sh) for alerting.",
+      "rationale": "Reverse shells indicate active exploitation — an attacker has gained code execution and is establishing a persistent connection. Interactive shells in production containers are also suspicious since the application should not spawn shell processes.",
+      "remediation": "1. Investigate the killed pod's logs and image. 2. Check for known CVEs in the running image version. 3. Review network connections to identify C2 server. 4. Rotate all credentials accessible to the namespace. 5. Review ACS runtime events for lateral movement attempts.",
+      "categories": [
+        "Anomalous Activity"
+      ],
+      "lifecycleStages": [
+        "RUNTIME"
+      ],
+      "severity": "CRITICAL_SEVERITY",
+      "enforcementActions": [
+        "KILL_POD_ENFORCEMENT"
+      ],
+      "eventSource": "DEPLOYMENT_EVENT",
+      "policySections": [
+        {
+          "sectionName": "Reverse Shell Process Detection",
+          "policyGroups": [
+            {
+              "fieldName": "Process Arguments",
+              "booleanOperator": "OR",
+              "negate": false,
+              "values": [
+                {
+                  "value": "/dev/tcp/"
+                },
+                {
+                  "value": "/dev/udp/"
+                },
+                {
+                  "value": "bash -i"
+                },
+                {
+                  "value": "mkfifo"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "sectionName": "Network Tool Execution",
+          "policyGroups": [
+            {
+              "fieldName": "Process Name",
+              "booleanOperator": "OR",
+              "negate": false,
+              "values": [
+                {
+                  "value": "nc"
+                },
+                {
+                  "value": "ncat"
+                },
+                {
+                  "value": "netcat"
+                },
+                {
+                  "value": "socat"
+                },
+                {
+                  "value": "nmap"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "scope": [
+        {
+          "cluster": null,
+          "namespace": "sampleapi-dev",
+          "label": null
+        },
+        {
+          "cluster": null,
+          "namespace": "sampleapi-sit",
+          "label": null
+        },
+        {
+          "cluster": null,
+          "namespace": "sampleapi-uat",
+          "label": null
+        },
+        {
+          "cluster": null,
+          "namespace": "sampleapi-prod",
+          "label": null
+        }
+      ],
+      "exclusions": [],
+      "disabled": false,
+      "isDefault": false
+    }
+  ]
+}

@@ -1,0 +1,150 @@
+# infra/phase17/networkpolicies/allow-monitoring-newservices.yaml
+# Allow Prometheus (user workload monitoring) to scrape new Phase 17 services
+# Covers: NotificationApi (8081), PostgreSQL (5432), Redis (6379)
+# Future-proofed for pg_exporter (9187) and redis_exporter (9121) sidecars
+# Applied to: sampleapi-dev, sampleapi-sit, sampleapi-uat, sampleapi-prod
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-monitoring-newservices
+  namespace: sampleapi-dev
+  labels:
+    team: devsecops
+    policy: allow-monitoring-newservices
+spec:
+  podSelector:
+    matchExpressions:
+      # Match any of the new Phase 17 services
+      - key: app
+        operator: In
+        values:
+          - notificationapi
+          - postgresql
+          - redis
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              network.openshift.io/policy-group: monitoring
+      ports:
+        - protocol: TCP
+          port: 8081   # NotificationApi metrics
+        - protocol: TCP
+          port: 5432   # PostgreSQL (direct or exporter)
+        - protocol: TCP
+          port: 6379   # Redis (direct or exporter)
+        - protocol: TCP
+          port: 9187   # pg_exporter (future)
+        - protocol: TCP
+          port: 9121   # redis_exporter (future)
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-monitoring-newservices
+  namespace: sampleapi-sit
+  labels:
+    team: devsecops
+    policy: allow-monitoring-newservices
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          - notificationapi
+          - postgresql
+          - redis
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              network.openshift.io/policy-group: monitoring
+      ports:
+        - protocol: TCP
+          port: 8081
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+        - protocol: TCP
+          port: 9187
+        - protocol: TCP
+          port: 9121
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-monitoring-newservices
+  namespace: sampleapi-uat
+  labels:
+    team: devsecops
+    policy: allow-monitoring-newservices
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          - notificationapi
+          - postgresql
+          - redis
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              network.openshift.io/policy-group: monitoring
+      ports:
+        - protocol: TCP
+          port: 8081
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+        - protocol: TCP
+          port: 9187
+        - protocol: TCP
+          port: 9121
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-monitoring-newservices
+  namespace: sampleapi-prod
+  labels:
+    team: devsecops
+    policy: allow-monitoring-newservices
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          - notificationapi
+          - postgresql
+          - redis
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              network.openshift.io/policy-group: monitoring
+      ports:
+        - protocol: TCP
+          port: 8081
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+        - protocol: TCP
+          port: 9187
+        - protocol: TCP
+          port: 9121
+  policyTypes:
+    - Ingress

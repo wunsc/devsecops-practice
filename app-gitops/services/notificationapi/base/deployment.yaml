@@ -1,0 +1,72 @@
+# app-gitops/base/notificationapi-deployment.yaml
+# Base Deployment for NotificationAPI — patched per environment
+# Uses own ConfigMap + Secret (notificationapi-env, notificationapi-secret)
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notificationapi
+  labels:
+    app: notificationapi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notificationapi
+  template:
+    metadata:
+      labels:
+        app: notificationapi
+      annotations:
+        instrumentation.opentelemetry.io/inject-dotnet: "dotnet-instrumentation"
+    spec:
+      serviceAccountName: sampleapi-sa
+      containers:
+        - name: notificationapi
+          # Image tag is set per environment by kustomize edit set image
+          image: notificationapi
+          ports:
+            - containerPort: 8081
+              name: http
+              protocol: TCP
+          # Load all config and secrets as environment variables
+          envFrom:
+            # Per-env config: Redis URL, logging levels (Rule 3)
+            - configMapRef:
+                name: notificationapi-env
+            # Per-env secrets: Redis password (Rule 4)
+            - secretRef:
+                name: notificationapi-secret
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          # Liveness probe — is the process alive?
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # Readiness probe — is the app ready for traffic?
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 3
+          # Startup probe — generous timeout for initial startup
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 12

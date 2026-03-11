@@ -1,0 +1,91 @@
+# infra/phase22/tempo-tenant-rbac.yaml
+# RBAC for Tempo multi-tenant gateway access.
+#
+# The Tempo gateway in openshift mode uses SubjectAccessReview to authorize
+# requests. Service accounts need ClusterRoles that grant access to
+# tenant-specific "resources" under the tempo.grafana.com API group.
+#
+# APPLY:
+#   oc apply -f tempo-tenant-rbac.yaml
+#
+# VERIFY:
+#   oc auth can-i create traces --as=system:serviceaccount:openshift-tempo:otel-collector-collector \
+#     --resource-name=dev -A --subresource="" --api-group=tempo.grafana.com
+---
+# ClusterRole: write traces to all tenants (for OTel Collector)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: tempostack-traces-write
+rules:
+- apiGroups:
+  - tempo.grafana.com
+  resources:
+  - dev
+  - sit
+  - uat
+  - prod
+  resourceNames:
+  - traces
+  verbs:
+  - create
+---
+# ClusterRoleBinding: OTel Collector SA → trace write access
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: tempostack-traces-write-otel-collector
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tempostack-traces-write
+subjects:
+- kind: ServiceAccount
+  name: otel-collector-collector
+  namespace: openshift-tempo
+---
+# ClusterRole: read traces from all tenants (for Grafana + Console users)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: tempostack-traces-read
+rules:
+- apiGroups:
+  - tempo.grafana.com
+  resources:
+  - dev
+  - sit
+  - uat
+  - prod
+  resourceNames:
+  - traces
+  verbs:
+  - get
+---
+# ClusterRoleBinding: Grafana SA → trace read access
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: tempostack-traces-read-grafana
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tempostack-traces-read
+subjects:
+- kind: ServiceAccount
+  name: grafana-sa
+  namespace: devsecops-tools
+---
+# ClusterRoleBinding: All authenticated users → trace read access (for Console UI)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: tempostack-traces-read-authenticated
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tempostack-traces-read
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: system:authenticated

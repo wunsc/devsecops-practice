@@ -1,0 +1,20 @@
+# services/notificationapi/overlays/dev/kustomization.yaml
+# DEV overlay for NotificationAPI — 1 replica
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: sampleapi-dev
+
+resources:
+- ../../base
+- configmap-env.yaml
+- secret-env.yaml
+
+patches:
+- path: patch-deployment.yaml
+
+# Image tag — updated by updateGitOps.groovy via: kustomize edit set image
+images:
+- name: notificationapi
+  newName: image-registry.openshift-image-registry.svc:5000/sampleapi-dev/notificationapi
+  newTag: main-03a9411

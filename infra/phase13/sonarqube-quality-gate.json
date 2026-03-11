@@ -1,0 +1,56 @@
+{
+  "_comment": "infra/phase13/sonarqube-quality-gate.json — SonarQube Quality Gate definition",
+  "_comment2": "Import via SonarQube Web API using apply-sonarqube-gate.sh",
+  "_comment3": "Gate: 0 bugs, 0 vulnerabilities, >=80% coverage, <3% duplication",
+  "name": "DevSecOps-Gate",
+  "conditions": [
+    {
+      "metric": "new_bugs",
+      "op": "GT",
+      "error": "0",
+      "description": "No new bugs allowed on new code"
+    },
+    {
+      "metric": "new_vulnerabilities",
+      "op": "GT",
+      "error": "0",
+      "description": "No new vulnerabilities allowed on new code"
+    },
+    {
+      "metric": "new_security_hotspots_reviewed",
+      "op": "LT",
+      "error": "100",
+      "description": "All new security hotspots must be reviewed"
+    },
+    {
+      "metric": "new_coverage",
+      "op": "LT",
+      "error": "80",
+      "description": "New code must have at least 80% test coverage"
+    },
+    {
+      "metric": "new_duplicated_lines_density",
+      "op": "GT",
+      "error": "3",
+      "description": "New code must have less than 3% duplication"
+    },
+    {
+      "metric": "new_code_smells",
+      "op": "GT",
+      "error": "10",
+      "description": "No more than 10 new code smells allowed"
+    },
+    {
+      "metric": "new_reliability_rating",
+      "op": "GT",
+      "error": "1",
+      "description": "Reliability rating must be A (1) on new code"
+    },
+    {
+      "metric": "new_security_rating",
+      "op": "GT",
+      "error": "1",
+      "description": "Security rating must be A (1) on new code"
+    }
+  ]
+}

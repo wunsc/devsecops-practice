@@ -1,0 +1,45 @@
+# infra/phase1/networkpolicies/tools-egress.yaml
+# Egress policy for Jenkins in devsecops-tools namespace
+# Jenkins needs to reach: GitLab, SonarQube, ACS, ArgoCD, image registry,
+# external package repos (NuGet, npm), and app namespaces
+# Allow all egress from tools namespace since Jenkins connects to many destinations
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tools-allow-all-egress
+  namespace: devsecops-tools
+  labels:
+    team: devsecops
+    policy: tools-egress
+spec:
+  podSelector: {}  # All pods in tools namespace (Jenkins controller + agents)
+  policyTypes:
+    - Egress
+  egress:
+    - {}  # Allow all egress — Jenkins must reach external registries, APIs, and internal services
+---
+# Also allow ingress to tools namespace from OpenShift router (for Jenkins/SonarQube UI)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-tools
+  namespace: devsecops-tools
+  labels:
+    team: devsecops
+    policy: tools-ingress
+spec:
+  podSelector: {}
+  ingress:
+    # From OpenShift router (external access to Jenkins/SonarQube UI)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              policy-group.network.openshift.io/ingress: ""
+    # From GitLab (webhooks to Jenkins)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              purpose: source-control
+  policyTypes:
+    - Ingress

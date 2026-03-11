@@ -1,0 +1,13 @@
+# infra/overlays/production/kustomization.yaml
+# PRODUCTION infra: ServiceAccount, PostgreSQL (higher resources), Redis + infra-secret
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: sampleapi-prod
+
+resources:
+- ../../base
+- secret-env.yaml
+
+patches:
+- path: patch-postgresql.yaml

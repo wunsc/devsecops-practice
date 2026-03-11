@@ -1,0 +1,65 @@
+{
+  "_comment": "infra/phase13/acs-policies/deploy-block-root-user.json",
+  "_comment2": "ACS Deploy-time policy: block containers running as root (UID 0)",
+  "_comment3": "Scoped to application namespaces only (not tools or infra namespaces)",
+  "policies": [
+    {
+      "name": "DevSecOps - Block Root User Containers (Deploy)",
+      "description": "Prevents deployment of containers that run as root (UID 0) in application namespaces. Containers must use a non-root user (e.g., USER 1001 in Dockerfile).",
+      "rationale": "Running containers as root violates the principle of least privilege and expands the attack surface. A container escape from a root process grants host-level access.",
+      "remediation": "Set USER 1001 (or another non-root UID) in the Dockerfile. Ensure the application does not require root privileges. The SampleAPI Dockerfile already sets USER 1001.",
+      "categories": [
+        "Security Best Practices"
+      ],
+      "lifecycleStages": [
+        "DEPLOY"
+      ],
+      "severity": "HIGH_SEVERITY",
+      "enforcementActions": [
+        "SCALE_TO_ZERO_ENFORCEMENT"
+      ],
+      "policySections": [
+        {
+          "sectionName": "Container runs as root",
+          "policyGroups": [
+            {
+              "fieldName": "Container User",
+              "booleanOperator": "OR",
+              "negate": false,
+              "values": [
+                {
+                  "value": "0"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "scope": [
+        {
+          "cluster": null,
+          "namespace": "sampleapi-dev",
+          "label": null
+        },
+        {
+          "cluster": null,
+          "namespace": "sampleapi-sit",
+          "label": null
+        },
+        {
+          "cluster": null,
+          "namespace": "sampleapi-uat",
+          "label": null
+        },
+        {
+          "cluster": null,
+          "namespace": "sampleapi-prod",
+          "label": null
+        }
+      ],
+      "exclusions": [],
+      "disabled": false,
+      "isDefault": false
+    }
+  ]
+}

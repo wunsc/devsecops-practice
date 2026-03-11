@@ -1,0 +1,85 @@
+# infra/phase1/networkpolicies/allow-ingress-router.yaml
+# Allow ingress from OpenShift Router (HAProxy) to application pods
+# Required for external HTTPS traffic via OpenShift Routes
+# The router runs in openshift-ingress namespace with label policy-group.network.openshift.io/ingress=""
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-from-openshift-ingress
+  namespace: sampleapi-dev
+  labels:
+    team: devsecops
+    policy: allow-ingress-router
+spec:
+  podSelector:
+    matchLabels:
+      app: sampleapi  # Only allow traffic to app pods
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              # OCP router namespace label (set by default on openshift-ingress)
+              policy-group.network.openshift.io/ingress: ""
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-from-openshift-ingress
+  namespace: sampleapi-sit
+  labels:
+    team: devsecops
+    policy: allow-ingress-router
+spec:
+  podSelector:
+    matchLabels:
+      app: sampleapi
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              policy-group.network.openshift.io/ingress: ""
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-from-openshift-ingress
+  namespace: sampleapi-uat
+  labels:
+    team: devsecops
+    policy: allow-ingress-router
+spec:
+  podSelector:
+    matchLabels:
+      app: sampleapi
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              policy-group.network.openshift.io/ingress: ""
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-from-openshift-ingress
+  namespace: sampleapi-prod
+  labels:
+    team: devsecops
+    policy: allow-ingress-router
+spec:
+  podSelector:
+    matchLabels:
+      app: sampleapi
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              policy-group.network.openshift.io/ingress: ""
+  policyTypes:
+    - Ingress

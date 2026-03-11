@@ -1,0 +1,64 @@
+# infra/phase21/grafana-datasource-prometheus.yaml
+# GrafanaDatasource — connects Grafana to the OpenShift Thanos Querier.
+#
+# Thanos Querier aggregates metrics from both platform and user workload
+# Prometheus instances. It provides a unified query endpoint.
+#
+# AUTHENTICATION:
+#   Grafana authenticates to Thanos Querier using the grafana-sa ServiceAccount token.
+#   The token is generated via `oc create token grafana-sa -n devsecops-tools --duration=8760h`
+#   and stored in a Secret referenced by this datasource.
+#
+# BEFORE APPLYING:
+#   1. Create the SA token:
+#      TOKEN=$(oc create token grafana-sa -n devsecops-tools --duration=8760h)
+#   2. Create the Secret:
+#      oc create secret generic grafana-sa-token -n devsecops-tools \
+#        --from-literal=token="$TOKEN"
+#
+# APPLY:
+#   oc apply -f grafana-datasource-prometheus.yaml -n devsecops-tools
+#
+# VERIFY:
+#   oc get grafanadatasource -n devsecops-tools
+#   # Expected: prometheus-datasource
+#   # In Grafana UI: Configuration → Data Sources → Prometheus should show green "Data source is working"
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDatasource
+metadata:
+  name: prometheus-datasource
+  namespace: devsecops-tools
+  labels:
+    app: grafana
+    team: devsecops
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: "grafana"                    # Must match Grafana CR label
+
+  datasource:
+    name: Prometheus
+    type: prometheus
+    access: proxy
+    isDefault: true
+    # Thanos Querier internal URL (cluster-internal, no TLS needed)
+    url: "https://thanos-querier.openshift-monitoring.svc.cluster.local:9091"
+    editable: false
+
+    jsonData:
+      # Skip TLS verification for internal service communication
+      tlsSkipVerify: true
+      # Use the SA token for authentication
+      httpHeaderName1: Authorization
+      # Time range for metric queries
+      timeInterval: "30s"
+
+    secureJsonData:
+      # Bearer token from grafana-sa ServiceAccount
+      # NOTE: valuesFrom with secretKeyRef does NOT work reliably in Grafana Operator v5.22.
+      # Instead, inject the token via shell expansion when applying:
+      #   TOKEN=$(oc create token grafana-sa -n devsecops-tools --duration=8760h)
+      #   cat grafana-datasource-prometheus.yaml | sed "s|REPLACE_WITH_TOKEN|Bearer $TOKEN|" | oc apply -f -
+      # Or use heredoc with shell variable expansion (see README-phase21.md).
+      httpHeaderValue1: "REPLACE_WITH_TOKEN"

@@ -1,0 +1,58 @@
+# infra/phase22/otel-instrumentation.yaml
+# Instrumentation CR — configures auto-instrumentation for .NET applications.
+#
+# When a Deployment has the annotation:
+#   instrumentation.opentelemetry.io/inject-dotnet: "true"
+# the OTel Operator mutating webhook injects an init container that copies
+# the .NET auto-instrumentation agent into the application container.
+#
+# This is an ALTERNATIVE to manual SDK instrumentation in Program.cs.
+# We use MANUAL SDK instrumentation (Phase 22 app changes) because:
+#   1. More control over which instrumentations are active
+#   2. Can add custom spans for business logic
+#   3. No dependency on operator webhook availability
+#
+# This CR is provided as documentation / fallback for services that
+# don't want to add OTel SDK code. To use it:
+#   1. Apply this CR to the app namespace
+#   2. Add annotation to Deployment: instrumentation.opentelemetry.io/inject-dotnet: "true"
+#   3. Restart the pod (the init container runs on pod creation only)
+#
+# APPLY (per namespace):
+#   oc apply -f otel-instrumentation.yaml -n sampleapi-dev
+#   oc apply -f otel-instrumentation.yaml -n sampleapi-sit
+#   # etc.
+#
+# VERIFY:
+#   oc get instrumentation -n sampleapi-dev
+#   # Expected: dotnet-instrumentation
+---
+apiVersion: opentelemetry.io/v1alpha1
+kind: Instrumentation
+metadata:
+  name: dotnet-instrumentation
+spec:
+  exporter:
+    # OTel Collector endpoint (cluster-internal gRPC)
+    endpoint: http://otel-collector-collector.openshift-tempo.svc:4317
+  propagators:
+    - tracecontext                                # W3C Trace Context (standard)
+    - baggage                                     # W3C Baggage (cross-service context)
+  sampler:
+    type: parentbased_traceidratio
+    argument: "1.0"                               # Sample 100% of traces (reduce for production)
+  dotnet:
+    # Red Hat OTel Operator v0.144 does NOT ship a .NET auto-instrumentation image.
+    # Use the upstream community image explicitly.
+    image: ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-dotnet:1.9.0
+    env:
+      - name: OTEL_EXPORTER_OTLP_PROTOCOL
+        value: "grpc"                    # .NET SDK defaults to http/protobuf; force gRPC for port 4317
+      - name: OTEL_DOTNET_AUTO_TRACES_ASPNETCORE_INSTRUMENTATION_ENABLED
+        value: "true"
+      - name: OTEL_DOTNET_AUTO_TRACES_HTTP_INSTRUMENTATION_ENABLED
+        value: "true"
+      - name: OTEL_DOTNET_AUTO_TRACES_ENTITYFRAMEWORKCORE_INSTRUMENTATION_ENABLED
+        value: "true"
+      - name: OTEL_DOTNET_AUTO_TRACES_STACKEXCHANGEREDIS_INSTRUMENTATION_ENABLED
+        value: "true"

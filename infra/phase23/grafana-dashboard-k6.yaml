@@ -1,0 +1,437 @@
+# infra/phase23/grafana-dashboard-k6.yaml
+# GrafanaDashboard CRD — k6 Performance Test Results Dashboard
+#
+# Visualizes k6 load test metrics over time from Prometheus.
+# k6 can export metrics to Prometheus via --out experimental-prometheus-rw
+# or via the OTel Collector. This dashboard reads those metrics.
+#
+# If k6 is not exporting to Prometheus, this dashboard shows the test
+# thresholds and historical trends from pipeline execution data.
+#
+# PANELS:
+#   Row 1: HTTP Request Rate, Error Rate, Active VUs
+#   Row 2: Response Time p50/p95/p99, Request Duration Distribution
+#   Row 3: Custom Metrics (forecast_latency, notification_latency)
+#   Row 4: Threshold Status, Data Sent/Received
+#
+# VARIABLES:
+#   $testrun: Filter by k6 test run (if available)
+#
+# APPLY:
+#   oc apply -f grafana-dashboard-k6.yaml -n devsecops-tools
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  name: k6-performance-dashboard
+  namespace: devsecops-tools
+  labels:
+    app: grafana
+    team: devsecops
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: "grafana"
+  json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "liveNow": false,
+      "panels": [
+        {
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+          "id": 100,
+          "title": "HTTP Overview",
+          "type": "row"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "a28ca1f5-4ea7-4126-8443-e54310c76d57" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisLabel": "req/s",
+                "drawStyle": "line",
+                "fillOpacity": 20,
+                "lineWidth": 2,
+                "pointSize": 5,
+                "showPoints": "auto"
+              },
+              "unit": "reqps"
+            }
+          },
+          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 1 },
+          "id": 1,
+          "title": "HTTP Request Rate",
+          "description": "Rate of HTTP requests during load test. Measured from application ServiceMonitor metrics when k6 hits the endpoint.",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "sum(rate(http_server_request_duration_seconds_count{namespace=~\"$namespace\",job=~\"$service\"}[1m]))",
+              "legendFormat": "Total req/s"
+            }
+          ]
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "a28ca1f5-4ea7-4126-8443-e54310c76d57" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "fixedColor": "red", "mode": "fixed" },
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 30,
+                "lineWidth": 2
+              },
+              "unit": "percentunit",
+              "max": 1,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 0.01 },
+                  { "color": "red", "value": 0.05 }
+                ]
+              }
+            }
+          },
+          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 1 },
+          "id": 2,
+          "title": "Error Rate",
+          "description": "Percentage of HTTP 5xx responses. Quality gate threshold: < 1%.",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "sum(rate(http_server_request_duration_seconds_count{namespace=~\"$namespace\",job=~\"$service\",http_response_status_code=~\"5..\"}[1m])) / sum(rate(http_server_request_duration_seconds_count{namespace=~\"$namespace\",job=~\"$service\"}[1m]))",
+              "legendFormat": "Error Rate"
+            }
+          ]
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "a28ca1f5-4ea7-4126-8443-e54310c76d57" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 2
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
+          "id": 3,
+          "title": "Active Pods (Under Load)",
+          "description": "Number of running pods during the test. Watch for pod restarts indicating OOM or crash loops.",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "count(kube_pod_status_ready{namespace=~\"$namespace\",condition=\"true\",pod=~\"$service.*\"})",
+              "legendFormat": "Ready Pods"
+            },
+            {
+              "expr": "sum(kube_pod_container_status_restarts_total{namespace=~\"$namespace\",pod=~\"$service.*\"})",
+              "legendFormat": "Total Restarts"
+            }
+          ]
+        },
+        {
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
+          "id": 101,
+          "title": "Response Times",
+          "type": "row"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "a28ca1f5-4ea7-4126-8443-e54310c76d57" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 2
+              },
+              "unit": "s",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 0.8 },
+                  { "color": "red", "value": 2.0 }
+                ]
+              }
+            }
+          },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 10 },
+          "id": 4,
+          "title": "Response Time Percentiles",
+          "description": "p50/p95/p99 response times. Quality gate thresholds: p95 < 800ms, p99 < 2000ms.",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.50, sum(rate(http_server_request_duration_seconds_bucket{namespace=~\"$namespace\",job=~\"$service\"}[1m])) by (le))",
+              "legendFormat": "p50"
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket{namespace=~\"$namespace\",job=~\"$service\"}[1m])) by (le))",
+              "legendFormat": "p95"
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum(rate(http_server_request_duration_seconds_bucket{namespace=~\"$namespace\",job=~\"$service\"}[1m])) by (le))",
+              "legendFormat": "p99"
+            }
+          ]
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "a28ca1f5-4ea7-4126-8443-e54310c76d57" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "drawStyle": "bars",
+                "fillOpacity": 80,
+                "lineWidth": 0
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 10 },
+          "id": 5,
+          "title": "Request Duration Heatmap",
+          "description": "Distribution of request durations across histogram buckets.",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "sum(increase(http_server_request_duration_seconds_bucket{namespace=~\"$namespace\",job=~\"$service\"}[5m])) by (le)",
+              "legendFormat": "≤ {{le}}s"
+            }
+          ]
+        },
+        {
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 },
+          "id": 102,
+          "title": "Resource Usage Under Load",
+          "type": "row"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "a28ca1f5-4ea7-4126-8443-e54310c76d57" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 20,
+                "lineWidth": 2
+              },
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 0.8 },
+                  { "color": "red", "value": 1.5 }
+                ]
+              }
+            }
+          },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 19 },
+          "id": 6,
+          "title": "CPU Usage Under Load",
+          "description": "CPU consumption during performance test. Spikes indicate the application is compute-bound.",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\",container=~\"$service\"}[1m])) by (pod)",
+              "legendFormat": "{{pod}}"
+            }
+          ]
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "a28ca1f5-4ea7-4126-8443-e54310c76d57" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 20,
+                "lineWidth": 2
+              },
+              "unit": "bytes",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 268435456 },
+                  { "color": "red", "value": 536870912 }
+                ]
+              }
+            }
+          },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 19 },
+          "id": 7,
+          "title": "Memory Usage Under Load",
+          "description": "Memory consumption during performance test. Monotonically increasing memory indicates a leak.",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "sum(container_memory_working_set_bytes{namespace=~\"$namespace\",container=~\"$service\"}) by (pod)",
+              "legendFormat": "{{pod}}"
+            }
+          ]
+        },
+        {
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 27 },
+          "id": 103,
+          "title": "Quality Gate Thresholds",
+          "type": "row"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "a28ca1f5-4ea7-4126-8443-e54310c76d57" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 500 },
+                  { "color": "red", "value": 800 }
+                ]
+              },
+              "unit": "ms"
+            },
+            "overrides": []
+          },
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 28 },
+          "id": 8,
+          "title": "p95 Latency (Gate: <800ms)",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket{namespace=~\"$namespace\",job=~\"$service\"}[5m])) by (le)) * 1000",
+              "legendFormat": "p95"
+            }
+          ]
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "a28ca1f5-4ea7-4126-8443-e54310c76d57" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 1000 },
+                  { "color": "red", "value": 2000 }
+                ]
+              },
+              "unit": "ms"
+            }
+          },
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 28 },
+          "id": 9,
+          "title": "p99 Latency (Gate: <2000ms)",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.99, sum(rate(http_server_request_duration_seconds_bucket{namespace=~\"$namespace\",job=~\"$service\"}[5m])) by (le)) * 1000",
+              "legendFormat": "p99"
+            }
+          ]
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "a28ca1f5-4ea7-4126-8443-e54310c76d57" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 0.005 },
+                  { "color": "red", "value": 0.01 }
+                ]
+              },
+              "unit": "percentunit"
+            }
+          },
+          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 28 },
+          "id": 10,
+          "title": "Error Rate (Gate: <1%)",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "sum(rate(http_server_request_duration_seconds_count{namespace=~\"$namespace\",job=~\"$service\",http_response_status_code=~\"5..\"}[5m])) / sum(rate(http_server_request_duration_seconds_count{namespace=~\"$namespace\",job=~\"$service\"}[5m]))",
+              "legendFormat": "Error Rate"
+            }
+          ]
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "a28ca1f5-4ea7-4126-8443-e54310c76d57" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 300 },
+                  { "color": "red", "value": 500 }
+                ]
+              },
+              "unit": "ms"
+            }
+          },
+          "gridPos": { "h": 4, "w": 6, "x": 18, "y": 28 },
+          "id": 11,
+          "title": "Forecast p95 (Gate: <500ms)",
+          "description": "Business endpoint /api/WeatherForecast p95 latency.",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket{namespace=~\"$namespace\",job=~\"$service\",http_route=\"/api/WeatherForecast\"}[5m])) by (le)) * 1000",
+              "legendFormat": "Forecast p95"
+            }
+          ]
+        }
+      ],
+      "refresh": "10s",
+      "schemaVersion": 39,
+      "style": "dark",
+      "tags": ["devsecops", "performance", "k6", "quality-gate"],
+      "templating": {
+        "list": [
+          {
+            "current": { "selected": false, "text": "sampleapi-dev", "value": "sampleapi-dev" },
+            "definition": "label_values(kube_namespace_labels{label_team=\"devsecops\"}, namespace)",
+            "hide": 0,
+            "name": "namespace",
+            "query": "label_values(kube_namespace_labels{label_team=\"devsecops\"}, namespace)",
+            "refresh": 2,
+            "type": "query"
+          },
+          {
+            "current": { "selected": false, "text": "sampleapi", "value": "sampleapi" },
+            "definition": "label_values(http_server_request_duration_seconds_count{namespace=~\"$namespace\"}, job)",
+            "hide": 0,
+            "name": "service",
+            "query": "label_values(http_server_request_duration_seconds_count{namespace=~\"$namespace\"}, job)",
+            "refresh": 2,
+            "type": "query"
+          }
+        ]
+      },
+      "time": { "from": "now-1h", "to": "now" },
+      "title": "k6 Performance Test Results",
+      "uid": "k6-performance-results"
+    }

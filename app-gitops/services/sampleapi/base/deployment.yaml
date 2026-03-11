@@ -1,0 +1,72 @@
+# app-gitops/base/deployment.yaml
+# Base Deployment for SampleAPI — patched per environment
+# References ConfigMap + Secret as envFrom (Rule 3 + Rule 4)
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sampleapi
+  labels:
+    app: sampleapi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sampleapi
+  template:
+    metadata:
+      labels:
+        app: sampleapi
+      annotations:
+        instrumentation.opentelemetry.io/inject-dotnet: "dotnet-instrumentation"
+    spec:
+      serviceAccountName: sampleapi-sa
+      containers:
+        - name: sampleapi
+          # Image tag is set per environment by kustomize edit set image
+          image: sampleapi
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+          # Load all config and secrets as environment variables
+          envFrom:
+            # Per-env config: DB URL, logging, feature flags (Rule 3)
+            - configMapRef:
+                name: sampleapi-env
+            # Per-env secrets: DB password, API keys (Rule 4)
+            - secretRef:
+                name: sampleapi-secret
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          # Liveness probe — is the process alive?
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # Readiness probe — is the app ready for traffic?
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 3
+          # Startup probe — generous timeout for initial startup
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 12

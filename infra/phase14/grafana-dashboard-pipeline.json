@@ -1,0 +1,278 @@
+{
+  "__comment": "infra/phase14/grafana-dashboard-pipeline.json — CI/CD Pipeline Execution Dashboard",
+  "__comment2": "Tracks Jenkins pipeline metrics: build duration, success rate, stage timing",
+  "__comment3": "Uses Jenkins Prometheus plugin metrics (jenkins_builds_*, jenkins_job_*)",
+  "__comment4": "If Jenkins Prometheus plugin is not installed, use Jenkins API polling instead",
+  "annotations": {
+    "list": [
+      {
+        "datasource": "Prometheus",
+        "enable": true,
+        "expr": "changes(kube_deployment_status_observed_generation{deployment=\"sampleapi\", namespace=~\"sampleapi-.*\"}[1m]) > 0",
+        "name": "Deployments",
+        "tagKeys": "namespace"
+      }
+    ]
+  },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "title": "Pipeline Overview",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false
+    },
+    {
+      "title": "MR Pipeline (T1) — Last Build Status",
+      "type": "stat",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 1 },
+      "targets": [
+        {
+          "expr": "jenkins_job_last_build_result_ordinal{jenkins_job=\"sampleapi-mr\"}",
+          "legendFormat": "T1 MR"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "SUCCESS", "color": "green" } } },
+            { "type": "value", "options": { "1": { "text": "UNSTABLE", "color": "yellow" } } },
+            { "type": "value", "options": { "2": { "text": "FAILURE", "color": "red" } } }
+          ]
+        }
+      }
+    },
+    {
+      "title": "Merge Pipeline (T2) — Last Build Status",
+      "type": "stat",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 8, "x": 8, "y": 1 },
+      "targets": [
+        {
+          "expr": "jenkins_job_last_build_result_ordinal{jenkins_job=\"sampleapi-merge\"}",
+          "legendFormat": "T2 Merge"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "SUCCESS", "color": "green" } } },
+            { "type": "value", "options": { "1": { "text": "UNSTABLE", "color": "yellow" } } },
+            { "type": "value", "options": { "2": { "text": "FAILURE", "color": "red" } } }
+          ]
+        }
+      }
+    },
+    {
+      "title": "Tag Pipeline (T3) — Last Build Status",
+      "type": "stat",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 1 },
+      "targets": [
+        {
+          "expr": "jenkins_job_last_build_result_ordinal{jenkins_job=\"sampleapi-tag\"}",
+          "legendFormat": "T3 Tag"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "SUCCESS", "color": "green" } } },
+            { "type": "value", "options": { "1": { "text": "UNSTABLE", "color": "yellow" } } },
+            { "type": "value", "options": { "2": { "text": "FAILURE", "color": "red" } } }
+          ]
+        }
+      }
+    },
+    {
+      "title": "Build Metrics",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "collapsed": false
+    },
+    {
+      "title": "Total Builds (last 24h)",
+      "type": "stat",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 6 },
+      "targets": [
+        {
+          "expr": "sum(increase(jenkins_builds_total{jenkins_job=~\"sampleapi-.*\"}[24h]))",
+          "legendFormat": "Total"
+        }
+      ]
+    },
+    {
+      "title": "Successful Builds (last 24h)",
+      "type": "stat",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 6 },
+      "targets": [
+        {
+          "expr": "sum(increase(jenkins_builds_success_build_count_total{jenkins_job=~\"sampleapi-.*\"}[24h]))",
+          "legendFormat": "Success"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "green" }
+        }
+      }
+    },
+    {
+      "title": "Failed Builds (last 24h)",
+      "type": "stat",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 6 },
+      "targets": [
+        {
+          "expr": "sum(increase(jenkins_builds_failed_build_count_total{jenkins_job=~\"sampleapi-.*\"}[24h]))",
+          "legendFormat": "Failed"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "red" }
+        }
+      }
+    },
+    {
+      "title": "Build Success Rate (%)",
+      "type": "gauge",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 6 },
+      "targets": [
+        {
+          "expr": "(sum(increase(jenkins_builds_success_build_count_total{jenkins_job=~\"sampleapi-.*\"}[7d])) / sum(increase(jenkins_builds_total{jenkins_job=~\"sampleapi-.*\"}[7d]))) * 100",
+          "legendFormat": "Success Rate"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": 0 },
+              { "color": "yellow", "value": 80 },
+              { "color": "green", "value": 95 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Build Duration History",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 10 },
+      "targets": [
+        {
+          "expr": "jenkins_builds_last_build_duration_milliseconds{jenkins_job=~\"sampleapi-.*\"} / 1000",
+          "legendFormat": "{{ jenkins_job }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" }
+      }
+    },
+    {
+      "title": "Build Rate Over Time",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 10 },
+      "targets": [
+        {
+          "expr": "sum(rate(jenkins_builds_total{jenkins_job=~\"sampleapi-.*\"}[1h])) by (jenkins_job) * 3600",
+          "legendFormat": "{{ jenkins_job }} builds/hour"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short" }
+      }
+    },
+    {
+      "title": "Deployment Tracking",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 },
+      "collapsed": false
+    },
+    {
+      "title": "DEV — Current Image Generation",
+      "type": "stat",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 19 },
+      "targets": [
+        {
+          "expr": "kube_deployment_status_observed_generation{deployment=\"sampleapi\", namespace=\"sampleapi-dev\"}",
+          "legendFormat": "Generation"
+        }
+      ]
+    },
+    {
+      "title": "SIT — Current Image Generation",
+      "type": "stat",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 19 },
+      "targets": [
+        {
+          "expr": "kube_deployment_status_observed_generation{deployment=\"sampleapi\", namespace=\"sampleapi-sit\"}",
+          "legendFormat": "Generation"
+        }
+      ]
+    },
+    {
+      "title": "UAT — Current Image Generation",
+      "type": "stat",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 19 },
+      "targets": [
+        {
+          "expr": "kube_deployment_status_observed_generation{deployment=\"sampleapi\", namespace=\"sampleapi-uat\"}",
+          "legendFormat": "Generation"
+        }
+      ]
+    },
+    {
+      "title": "PROD — Current Image Generation",
+      "type": "stat",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 19 },
+      "targets": [
+        {
+          "expr": "kube_deployment_status_observed_generation{deployment=\"sampleapi\", namespace=\"sampleapi-prod\"}",
+          "legendFormat": "Generation"
+        }
+      ]
+    },
+    {
+      "title": "Deployment Rollout History (all environments)",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 23 },
+      "targets": [
+        {
+          "expr": "changes(kube_deployment_status_observed_generation{deployment=\"sampleapi\", namespace=~\"sampleapi-.*\"}[1h])",
+          "legendFormat": "{{ namespace }} rollouts/hour"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 36,
+  "style": "dark",
+  "tags": ["devsecops", "sampleapi", "pipeline", "jenkins"],
+  "templating": {
+    "list": []
+  },
+  "time": { "from": "now-24h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "SampleAPI - CI/CD Pipeline",
+  "uid": "sampleapi-pipeline",
+  "version": 1
+}

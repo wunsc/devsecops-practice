@@ -1,0 +1,175 @@
+# infra/phase20/prometheus-rules-slo.yaml
+# SLO burn-rate alerts for SampleApi using the multi-window approach.
+#
+# SLO: 99.9% availability = 43.2 minutes error budget per 30-day month.
+#
+# MULTI-WINDOW BURN-RATE ALERTING:
+#   Instead of alerting on raw error rate (too noisy), we measure how fast
+#   we're consuming the error budget. A "burn rate" of 1x means we'll exactly
+#   exhaust the budget by month-end. Higher burn rates trigger earlier alerts.
+#
+#   Each alert uses TWO windows (e.g., 1h AND 5m) to catch:
+#   - Long window: is this a sustained problem (not a blip)?
+#   - Short window: is it still happening right now?
+#
+# ┌──────────┬───────────┬────────────────┬─────────────────────┐
+# │ Severity │ Burn Rate │ Windows        │ Budget Consumed     │
+# ├──────────┼───────────┼────────────────┼─────────────────────┤
+# │ critical │ 14.4x     │ 1h AND 5m      │ 2% in 1 hour        │
+# │ warning  │ 6x        │ 6h AND 30m     │ 5% in 6 hours       │
+# │ info     │ 1x        │ 3d AND 6h      │ 10% in 3 days       │
+# └──────────┴───────────┴────────────────┴─────────────────────┘
+#
+# RECORDING RULES:
+#   Pre-compute error ratios over standard windows so alert rules are simple.
+#
+# DEPLOY TO: Each app namespace.
+#   oc apply -f prometheus-rules-slo.yaml -n sampleapi-dev
+#   (repeat for sit, uat, prod)
+#
+# VERIFY:
+#   oc get prometheusrule sampleapi-slo-alerts -n sampleapi-dev
+#   # In OCP Console → Observe → Alerting → look for SampleApi* alerts
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: sampleapi-slo-alerts
+  labels:
+    app: sampleapi
+    team: devsecops
+    prometheus: user-workload
+spec:
+  groups:
+    # ── Recording rules: pre-compute error ratios ──
+    - name: sampleapi-slo-recording
+      interval: 30s
+      rules:
+        # Error ratio over various windows
+        # "Error" = HTTP 5xx response. Total = all HTTP responses.
+        # Uses prometheus-net metric: http_request_duration_seconds_count with status_code label.
+
+        # 5-minute error ratio
+        - record: sampleapi:http_error_ratio:rate5m
+          expr: |
+            (
+              sum(rate(http_request_duration_seconds_count{job="sampleapi", status_code=~"5.."}[5m]))
+              /
+              sum(rate(http_request_duration_seconds_count{job="sampleapi"}[5m]))
+            ) or vector(0)
+
+        # 30-minute error ratio
+        - record: sampleapi:http_error_ratio:rate30m
+          expr: |
+            (
+              sum(rate(http_request_duration_seconds_count{job="sampleapi", status_code=~"5.."}[30m]))
+              /
+              sum(rate(http_request_duration_seconds_count{job="sampleapi"}[30m]))
+            ) or vector(0)
+
+        # 1-hour error ratio
+        - record: sampleapi:http_error_ratio:rate1h
+          expr: |
+            (
+              sum(rate(http_request_duration_seconds_count{job="sampleapi", status_code=~"5.."}[1h]))
+              /
+              sum(rate(http_request_duration_seconds_count{job="sampleapi"}[1h]))
+            ) or vector(0)
+
+        # 6-hour error ratio
+        - record: sampleapi:http_error_ratio:rate6h
+          expr: |
+            (
+              sum(rate(http_request_duration_seconds_count{job="sampleapi", status_code=~"5.."}[6h]))
+              /
+              sum(rate(http_request_duration_seconds_count{job="sampleapi"}[6h]))
+            ) or vector(0)
+
+        # 3-day error ratio
+        - record: sampleapi:http_error_ratio:rate3d
+          expr: |
+            (
+              sum(rate(http_request_duration_seconds_count{job="sampleapi", status_code=~"5.."}[3d]))
+              /
+              sum(rate(http_request_duration_seconds_count{job="sampleapi"}[3d]))
+            ) or vector(0)
+
+        # Current SLO target (0.001 = 99.9%)
+        - record: sampleapi:slo_target
+          expr: "0.001"
+
+    # ── Alert rules: burn-rate based ──
+    - name: sampleapi-slo-alerts
+      rules:
+        # CRITICAL: Burning 14.4x budget — 2% consumed in 1 hour
+        # This means we'll exhaust the entire 30-day budget in ~50 hours.
+        # Requires both 1h AND 5m windows to fire (prevents false alarms on blips).
+        - alert: SampleApiErrorBudgetBurnCritical
+          expr: |
+            sampleapi:http_error_ratio:rate1h > (14.4 * 0.001)
+            and
+            sampleapi:http_error_ratio:rate5m > (14.4 * 0.001)
+          for: 2m
+          labels:
+            severity: critical
+            service: sampleapi
+            slo: availability
+          annotations:
+            summary: "SampleApi error budget burning at 14.4x rate"
+            description: >
+              SampleApi error ratio is {{ $value | humanizePercentage }} over the last hour,
+              consuming 2% of the monthly error budget per hour.
+              At this rate, the entire error budget will be exhausted in ~50 hours.
+            runbook_url: "https://docs.internal/runbooks/sampleapi-high-error-rate"
+
+        # WARNING: Burning 6x budget — 5% consumed in 6 hours
+        - alert: SampleApiErrorBudgetBurnWarning
+          expr: |
+            sampleapi:http_error_ratio:rate6h > (6 * 0.001)
+            and
+            sampleapi:http_error_ratio:rate30m > (6 * 0.001)
+          for: 5m
+          labels:
+            severity: warning
+            service: sampleapi
+            slo: availability
+          annotations:
+            summary: "SampleApi error budget burning at 6x rate"
+            description: >
+              SampleApi error ratio is {{ $value | humanizePercentage }} over the last 6 hours,
+              consuming 5% of the monthly error budget in 6 hours.
+
+        # INFO: Burning 1x budget — 10% consumed in 3 days
+        # This is a slow burn — might be acceptable, but worth investigating.
+        - alert: SampleApiErrorBudgetBurnSlow
+          expr: |
+            sampleapi:http_error_ratio:rate3d > (1 * 0.001)
+            and
+            sampleapi:http_error_ratio:rate6h > (1 * 0.001)
+          for: 30m
+          labels:
+            severity: info
+            service: sampleapi
+            slo: availability
+          annotations:
+            summary: "SampleApi error budget slowly burning"
+            description: >
+              SampleApi error ratio is {{ $value | humanizePercentage }} over the last 3 days.
+              At this rate, the error budget will be exhausted by month-end.
+
+        # ── Latency SLO: p99 < 1s ──
+        - alert: SampleApiLatencyHigh
+          expr: |
+            histogram_quantile(0.99,
+              sum(rate(http_request_duration_seconds_bucket{job="sampleapi"}[5m])) by (le)
+            ) > 1.0
+          for: 10m
+          labels:
+            severity: warning
+            service: sampleapi
+            slo: latency
+          annotations:
+            summary: "SampleApi p99 latency exceeds 1 second"
+            description: >
+              SampleApi p99 latency is {{ $value | humanizeDuration }} over the last 5 minutes.
+              SLO target: p99 < 1 second.

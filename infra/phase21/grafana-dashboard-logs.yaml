@@ -1,0 +1,175 @@
+# infra/phase21/grafana-dashboard-logs.yaml
+# GrafanaDashboard CRD — Log Analytics Dashboard
+#
+# Uses LokiStack as datasource to visualize:
+#   - Log volume by namespace over time
+#   - Error log rate and patterns
+#   - Top error messages (aggregated)
+#   - Log stream table (live tail)
+#
+# DATA SOURCE: Loki (LokiStack via Grafana Loki datasource)
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  name: logs-dashboard
+  namespace: devsecops-tools
+  labels:
+    app: grafana
+    team: devsecops
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: "grafana"
+  json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "panels": [
+        {
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+          "id": 100,
+          "title": "Log Volume",
+          "type": "row"
+        },
+        {
+          "title": "Log Volume by Namespace (bytes/s)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 16, "x": 0, "y": 1 },
+          "id": 1,
+          "datasource": { "type": "loki", "uid": "${lokids}" },
+          "targets": [
+            {
+              "expr": "sum by (kubernetes_namespace_name) (bytes_rate({kubernetes_namespace_name=~\"$namespace\"}[$__interval]))",
+              "legendFormat": "{{kubernetes_namespace_name}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "Bps",
+              "custom": { "drawStyle": "bars", "fillOpacity": 60, "stacking": { "mode": "normal" } }
+            }
+          }
+        },
+        {
+          "title": "Total Log Lines (selected range)",
+          "type": "stat",
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
+          "id": 2,
+          "datasource": { "type": "loki", "uid": "${lokids}" },
+          "targets": [
+            {
+              "expr": "sum(count_over_time({kubernetes_namespace_name=~\"$namespace\"}[$__range]))",
+              "legendFormat": "Total lines"
+            }
+          ]
+        },
+        {
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
+          "id": 101,
+          "title": "Error Analysis",
+          "type": "row"
+        },
+        {
+          "title": "Error Log Rate (lines/s)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 10 },
+          "id": 3,
+          "datasource": { "type": "loki", "uid": "${lokids}" },
+          "targets": [
+            {
+              "expr": "sum by (kubernetes_namespace_name) (rate({kubernetes_namespace_name=~\"$namespace\"} |= \"error\" or |= \"Error\" or |= \"ERROR\" [$__interval]))",
+              "legendFormat": "{{kubernetes_namespace_name}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": { "drawStyle": "line", "fillOpacity": 20 },
+              "color": { "mode": "palette-classic" }
+            }
+          }
+        },
+        {
+          "title": "Error vs Non-Error (ratio)",
+          "type": "piechart",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 10 },
+          "id": 4,
+          "datasource": { "type": "loki", "uid": "${lokids}" },
+          "targets": [
+            {
+              "expr": "sum(count_over_time({kubernetes_namespace_name=~\"$namespace\"} |= \"error\" or |= \"Error\" [$__range]))",
+              "legendFormat": "Errors"
+            },
+            {
+              "expr": "sum(count_over_time({kubernetes_namespace_name=~\"$namespace\"} != \"error\" != \"Error\" != \"ERROR\" [$__range]))",
+              "legendFormat": "Non-errors"
+            }
+          ]
+        },
+        {
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 },
+          "id": 102,
+          "title": "Log Stream",
+          "type": "row"
+        },
+        {
+          "title": "Recent Logs",
+          "type": "logs",
+          "gridPos": { "h": 12, "w": 24, "x": 0, "y": 19 },
+          "id": 5,
+          "datasource": { "type": "loki", "uid": "${lokids}" },
+          "targets": [
+            {
+              "expr": "{kubernetes_namespace_name=~\"$namespace\", kubernetes_container_name=~\"$container\"}",
+              "legendFormat": ""
+            }
+          ],
+          "options": {
+            "showTime": true,
+            "showLabels": true,
+            "showCommonLabels": false,
+            "wrapLogMessage": true,
+            "prettifyLogMessage": false,
+            "enableLogDetails": true,
+            "sortOrder": "Descending",
+            "dedupStrategy": "none"
+          }
+        }
+      ],
+      "refresh": "30s",
+      "schemaVersion": 39,
+      "tags": ["devsecops", "logs", "loki"],
+      "templating": {
+        "list": [
+          {
+            "name": "lokids",
+            "type": "datasource",
+            "query": "loki",
+            "current": { "text": "Loki", "value": "Loki" }
+          },
+          {
+            "name": "namespace",
+            "type": "custom",
+            "query": "sampleapi-dev,sampleapi-sit,sampleapi-uat,sampleapi-prod,devsecops-tools,devsecops-gitlab",
+            "multi": true,
+            "includeAll": true,
+            "current": { "text": "sampleapi-dev", "value": "sampleapi-dev" }
+          },
+          {
+            "name": "container",
+            "type": "custom",
+            "query": "sampleapi,notificationapi,jenkins,gitlab-ce,postgresql,redis",
+            "multi": true,
+            "includeAll": true,
+            "current": { "text": "All", "value": "$__all" }
+          }
+        ]
+      },
+      "time": { "from": "now-1h", "to": "now" },
+      "title": "Log Analytics",
+      "uid": "devsecops-logs"
+    }

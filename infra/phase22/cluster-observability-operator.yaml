@@ -1,0 +1,37 @@
+# infra/phase22/cluster-observability-operator.yaml
+# Cluster Observability Operator — provides distributed tracing UI plugin
+# for the OpenShift Console, replacing the deprecated Jaeger UI.
+#
+# APPLY:
+#   oc apply -f cluster-observability-operator.yaml
+#
+# VERIFY:
+#   oc get csv -n openshift-operators | grep cluster-observability
+#   oc get uiplugin
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openshift-observability-operator
+  labels:
+    openshift.io/cluster-monitoring: "true"
+---
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: openshift-observability-operator
+  namespace: openshift-observability-operator
+spec:
+  upgradeStrategy: Default
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: cluster-observability-operator
+  namespace: openshift-observability-operator
+spec:
+  channel: stable
+  installPlanApproval: Automatic
+  name: cluster-observability-operator
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace

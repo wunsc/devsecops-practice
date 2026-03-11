@@ -1,0 +1,38 @@
+# infra/phase6/argocd-app-sit.yaml
+# ArgoCD Application for SIT environment
+# syncPolicy: manual — requires Team Lead approval via MR to app-gitops
+# Promotion flow: update overlays/sit/kustomization.yaml with new image tag
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sampleapi-sit
+  namespace: openshift-gitops
+  labels:
+    team: devsecops
+    app: sampleapi
+    environment: sit
+spec:
+  project: devsecops
+
+  source:
+    repoURL: "https://gitlab-devsecops-gitlab.apps.cluster-pmqwq.pmqwq.sandbox270.opentlc.com/devsecops/app-gitops.git"
+    targetRevision: main
+    path: overlays/sit
+
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: sampleapi-sit
+
+  # Manual sync for SIT — Team Lead approves MR, then manually syncs
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=false
+      - PruneLast=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 1m

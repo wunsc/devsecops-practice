@@ -1,0 +1,37 @@
+# infra/phase24/chaos-test-network.yaml
+# NetworkPolicy: Chaos test — simulate network partition between services.
+#
+# This policy blocks SampleApi → NotificationApi traffic, simulating a
+# network partition. It verifies that SampleApi degrades gracefully
+# (returns weather data without notifications) instead of crashing.
+#
+# USAGE:
+#   # Apply partition
+#   oc apply -f chaos-test-network.yaml -n sampleapi-dev
+#
+#   # Test — should still return weather data (notification silently fails)
+#   curl -sk https://sampleapi-sampleapi-dev.${APPS_DOMAIN}/api/WeatherForecast
+#
+#   # Remove partition
+#   oc delete -f chaos-test-network.yaml -n sampleapi-dev
+#
+# IMPORTANT: Apply to DEV only — never run network chaos in PROD without approval.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: chaos-block-notification
+  namespace: sampleapi-dev
+  labels:
+    app: chaos-test
+    team: devsecops
+    chaos-test: "true"
+spec:
+  podSelector:
+    matchLabels:
+      app: notificationapi
+  policyTypes:
+    - Ingress
+  ingress: []                                     # Empty = deny all ingress to notificationapi
+  # This blocks all incoming traffic to notificationapi, including from sampleapi.
+  # SampleApi's HTTP client should timeout and handle the error gracefully.

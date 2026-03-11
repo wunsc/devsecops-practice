@@ -1,0 +1,22 @@
+# infra/phase3/sonarqube-route.yaml
+# TLS edge-terminated Route for SonarQube web UI
+# External URL: https://sonarqube-devsecops-tools.apps.<cluster-domain>
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: sonarqube
+  namespace: devsecops-tools
+  labels:
+    team: devsecops
+    app: sonarqube
+spec:
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  to:
+    kind: Service
+    name: sonarqube
+    weight: 100
+  port:
+    targetPort: http

@@ -1,0 +1,20 @@
+# services/sampleapi/overlays/production/kustomization.yaml
+# PRODUCTION overlay for SampleAPI — 3 replicas, PDB, anti-affinity
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: sampleapi-prod
+
+resources:
+- ../../base
+- pdb.yaml
+- configmap-env.yaml
+- secret-env.yaml
+
+patches:
+- path: patch-deployment.yaml
+
+images:
+- name: sampleapi
+  newName: image-registry.openshift-image-registry.svc:5000/sampleapi-dev/sampleapi
+  newTag: v1.5.1

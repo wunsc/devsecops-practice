@@ -1,0 +1,173 @@
+# infra/phase2/gitlab-deployment.yaml
+# GitLab CE container deployment on OpenShift
+# Uses external PostgreSQL and Redis (separate StatefulSets)
+# Encryption keys and DB credentials injected from Secrets
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gitlab-ce
+  namespace: devsecops-gitlab
+  labels:
+    team: devsecops
+    app: gitlab-ce
+    component: source-control
+spec:
+  replicas: 1
+  # Recreate strategy — GitLab doesn't support rolling updates well as a single instance
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: gitlab-ce
+  template:
+    metadata:
+      labels:
+        app: gitlab-ce
+        team: devsecops
+    spec:
+      containers:
+        - name: gitlab
+          image: docker.io/gitlab/gitlab-ce:17.0.0-ce.0
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+            - containerPort: 2222
+              name: ssh
+              protocol: TCP
+          env:
+            # Database credentials from secret
+            - name: GITLAB_DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: gitlab-db-credentials
+                  key: GITLAB_DB_NAME
+            - name: GITLAB_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: gitlab-db-credentials
+                  key: GITLAB_DB_USER
+            - name: GITLAB_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: gitlab-db-credentials
+                  key: GITLAB_DB_PASSWORD
+            # Redis password from secret
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: gitlab-redis-credentials
+                  key: REDIS_PASSWORD
+            # Encryption keys from secret (CRITICAL for data persistence)
+            - name: DB_KEY_BASE
+              valueFrom:
+                secretKeyRef:
+                  name: gitlab-rails-secrets
+                  key: DB_KEY_BASE
+            - name: SECRET_KEY_BASE
+              valueFrom:
+                secretKeyRef:
+                  name: gitlab-rails-secrets
+                  key: SECRET_KEY_BASE
+            - name: OTP_KEY_BASE
+              valueFrom:
+                secretKeyRef:
+                  name: gitlab-rails-secrets
+                  key: OTP_KEY_BASE
+            # Root password (only used on first boot)
+            - name: GITLAB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: gitlab-rails-secrets
+                  key: GITLAB_ROOT_PASSWORD
+            # GitLab Omnibus config — points to the mounted gitlab.rb
+            - name: GITLAB_OMNIBUS_CONFIG
+              value: "from_file('/etc/gitlab/gitlab.rb')"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 3Gi
+            limits:
+              cpu: "4"
+              memory: 8Gi
+          volumeMounts:
+            # GitLab configuration (gitlab.rb from ConfigMap)
+            - name: gitlab-config
+              mountPath: /etc/gitlab/gitlab.rb
+              subPath: gitlab.rb
+              readOnly: true
+            # Persistent data (repos, uploads, etc.)
+            - name: gitlab-data
+              mountPath: /var/opt/gitlab
+            # Persistent logs
+            - name: gitlab-logs
+              mountPath: /var/log/gitlab
+          # GitLab takes a long time to start — generous startup probe
+          # Probes use exec+curl to localhost because:
+          # - Nginx returns 404 via pod IP (server_name mismatch)
+          # - Puma returns 404 via pod IP (Host header check against external_url)
+          # - Both return 200 via localhost
+          startupProbe:
+            exec:
+              command: ["curl", "-sf", "http://localhost:8181/-/readiness"]
+            initialDelaySeconds: 180
+            periodSeconds: 15
+            failureThreshold: 60
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["curl", "-sf", "http://localhost:8181/-/liveness"]
+            initialDelaySeconds: 0
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command: ["curl", "-sf", "http://localhost:8181/-/readiness"]
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: gitlab-config
+          configMap:
+            name: gitlab-config
+        - name: gitlab-data
+          persistentVolumeClaim:
+            claimName: gitlab-data
+        - name: gitlab-logs
+          persistentVolumeClaim:
+            claimName: gitlab-logs
+---
+# PVC for GitLab data (repos, uploads, artifacts)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gitlab-data
+  namespace: devsecops-gitlab
+  labels:
+    team: devsecops
+    app: gitlab-ce
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: gp3-csi
+  resources:
+    requests:
+      storage: 50Gi
+---
+# PVC for GitLab logs
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gitlab-logs
+  namespace: devsecops-gitlab
+  labels:
+    team: devsecops
+    app: gitlab-ce
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: gp3-csi
+  resources:
+    requests:
+      storage: 5Gi

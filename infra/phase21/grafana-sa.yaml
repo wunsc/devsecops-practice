@@ -1,0 +1,30 @@
+# infra/phase21/grafana-sa.yaml
+# ServiceAccount for Grafana to authenticate with Thanos Querier.
+#
+# Grafana needs to read metrics from the OpenShift Thanos Querier, which requires
+# a ServiceAccount token with the cluster-monitoring-view ClusterRole.
+#
+# The SA token is injected into the Prometheus datasource as a Bearer token.
+# Grafana Operator v5 can reference it via `spec.datasource.secureJsonData`.
+#
+# APPLY:
+#   oc apply -f grafana-sa.yaml -n devsecops-tools
+#
+# VERIFY:
+#   oc get sa grafana-sa -n devsecops-tools
+#   oc create token grafana-sa -n devsecops-tools --duration=8760h
+#   # Should return a valid JWT token
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: grafana-sa
+  namespace: devsecops-tools
+  labels:
+    app: grafana
+    team: devsecops
+  annotations:
+    # Long-lived token for Grafana datasource authentication
+    # Alternatively, use projected volumes with short-lived tokens
+    serviceaccounts.openshift.io/oauth-redirectreference.grafana: >
+      {"kind":"OAuthRedirectReference","apiVersion":"v1","reference":{"kind":"Route","name":"grafana"}}

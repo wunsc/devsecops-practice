@@ -1,0 +1,42 @@
+# infra/phase22/tempo-operator-subscription.yaml
+# OLM Subscription for the Tempo Operator (distributed tracing backend).
+#
+# The Tempo Operator manages TempoStack and TempoMonolithic CRs.
+# It stores trace data in S3-compatible storage (ODF NooBaa via OBC).
+#
+# PREREQUISITE:
+#   - openshift-tempo namespace exists (created by infra/phase19/obc-tempo.yaml)
+#
+# APPLY:
+#   oc apply -f tempo-operator-subscription.yaml
+#
+# VERIFY:
+#   oc get csv -n openshift-tempo-operator | grep tempo
+#   # Expected: tempo-operator.vX.Y.Z — Succeeded
+---
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: openshift-tempo-operator
+  namespace: openshift-tempo-operator
+spec:
+  upgradeStrategy: Default
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openshift-tempo-operator
+  labels:
+    openshift.io/cluster-monitoring: "true"
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: tempo-product
+  namespace: openshift-tempo-operator
+spec:
+  channel: stable
+  installPlanApproval: Automatic
+  name: tempo-product
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace

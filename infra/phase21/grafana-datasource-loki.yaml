@@ -1,0 +1,59 @@
+# infra/phase21/grafana-datasource-loki.yaml
+# GrafanaDatasource — connects Grafana to LokiStack for log queries.
+#
+# LokiStack exposes a query endpoint at:
+#   https://logging-loki-gateway-http.openshift-logging.svc:8080/api/logs/v1/application/
+#
+# The URL includes the tenant name (/application/) because LokiStack runs in
+# multi-tenant mode. For infrastructure logs, use /infrastructure/ tenant.
+#
+# AUTHENTICATION:
+#   Same grafana-sa token as Prometheus datasource. The SA must have
+#   cluster-logging-application-view ClusterRole bound (done in grafana-sa-clusterrolebinding.yaml).
+#
+# APPLY:
+#   oc apply -f grafana-datasource-loki.yaml -n devsecops-tools
+#
+# VERIFY:
+#   oc get grafanadatasource -n devsecops-tools
+#   # Expected: loki-datasource
+#   # In Grafana UI: Explore → select Loki → {kubernetes_namespace_name="sampleapi-dev"} → Run query
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDatasource
+metadata:
+  name: loki-datasource
+  namespace: devsecops-tools
+  labels:
+    app: grafana
+    team: devsecops
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: "grafana"
+
+  datasource:
+    name: Loki
+    type: loki
+    access: proxy
+    # LokiStack gateway URL — /application/ tenant for container logs
+    url: "https://logging-loki-gateway-http.openshift-logging.svc:8080/api/logs/v1/application/"
+    editable: false
+
+    jsonData:
+      tlsSkipVerify: true
+      httpHeaderName1: Authorization
+      # Max lines per query (prevent OOM on large result sets)
+      maxLines: 5000
+      # Derived fields — link log entries to traces (Phase 22 integration)
+      # derivedFields:
+      #   - datasourceUid: tempo-datasource
+      #     matcherRegex: '"traceId":"(\w+)"'
+      #     name: TraceID
+      #     url: "$${__value.raw}"
+
+    secureJsonData:
+      # Bearer token from grafana-sa ServiceAccount
+      # NOTE: valuesFrom with secretKeyRef does NOT work in Grafana Operator v5.22.
+      # Inject via shell expansion — see grafana-datasource-prometheus.yaml comments.
+      httpHeaderValue1: "REPLACE_WITH_TOKEN"

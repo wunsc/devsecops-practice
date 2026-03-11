@@ -1,0 +1,18 @@
+# app-gitops/base/service.yaml
+# ClusterIP Service for SampleAPI — routes traffic to pods
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sampleapi
+  labels:
+    app: sampleapi
+spec:
+  type: ClusterIP
+  selector:
+    app: sampleapi
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP

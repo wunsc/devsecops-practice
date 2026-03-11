@@ -1,0 +1,63 @@
+# infra/phase4/registry-sa-rolebinding.yaml
+# Grant Jenkins SA the ability to push images to the OCP internal registry
+# Jenkins builds images in the pipeline and pushes to sampleapi-dev namespace
+#
+# system:image-builder allows: push images to the internal registry
+# system:image-puller allows: pull images from the internal registry
+---
+# Jenkins SA → image-builder in sampleapi-dev (push built images)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jenkins-image-builder
+  namespace: sampleapi-dev
+  labels:
+    team: devsecops
+    component: registry
+spec: {}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:image-builder
+subjects:
+  - kind: ServiceAccount
+    name: jenkins-sa
+    namespace: devsecops-tools
+---
+# Jenkins SA → image-puller in sampleapi-dev (pull base images, verify pushed images)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jenkins-image-puller
+  namespace: sampleapi-dev
+  labels:
+    team: devsecops
+    component: registry
+spec: {}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:image-puller
+subjects:
+  - kind: ServiceAccount
+    name: jenkins-sa
+    namespace: devsecops-tools
+---
+# Jenkins SA → image-builder in devsecops-tools (build agent images)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jenkins-image-builder
+  namespace: devsecops-tools
+  labels:
+    team: devsecops
+    component: registry
+spec: {}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:image-builder
+subjects:
+  - kind: ServiceAccount
+    name: jenkins-sa
+    namespace: devsecops-tools

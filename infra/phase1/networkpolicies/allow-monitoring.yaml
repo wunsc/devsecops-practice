@@ -1,0 +1,97 @@
+# infra/phase1/networkpolicies/allow-monitoring.yaml
+# Allow Prometheus (user workload monitoring) to scrape app pods
+# OpenShift user workload monitoring runs in openshift-user-workload-monitoring namespace
+# Also allow openshift-monitoring for platform-level scraping
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-monitoring
+  namespace: sampleapi-dev
+  labels:
+    team: devsecops
+    policy: allow-monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app: sampleapi
+  ingress:
+    - from:
+        # User workload monitoring namespace
+        - namespaceSelector:
+            matchLabels:
+              network.openshift.io/policy-group: monitoring
+      ports:
+        - protocol: TCP
+          port: 8080  # Application metrics port
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-monitoring
+  namespace: sampleapi-sit
+  labels:
+    team: devsecops
+    policy: allow-monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app: sampleapi
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              network.openshift.io/policy-group: monitoring
+      ports:
+        - protocol: TCP
+          port: 8080
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-monitoring
+  namespace: sampleapi-uat
+  labels:
+    team: devsecops
+    policy: allow-monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app: sampleapi
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              network.openshift.io/policy-group: monitoring
+      ports:
+        - protocol: TCP
+          port: 8080
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-monitoring
+  namespace: sampleapi-prod
+  labels:
+    team: devsecops
+    policy: allow-monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app: sampleapi
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              network.openshift.io/policy-group: monitoring
+      ports:
+        - protocol: TCP
+          port: 8080
+  policyTypes:
+    - Ingress

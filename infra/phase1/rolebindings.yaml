@@ -1,0 +1,226 @@
+# infra/phase1/rolebindings.yaml
+# Per-namespace RoleBindings that bind ClusterRoles to ServiceAccounts
+# ArgoCD SA gets deployer rights in each app namespace
+# Jenkins SA gets deployer rights in tools namespace + image push in app namespaces
+---
+# --- ArgoCD deployer bindings (one per app namespace) ---
+
+# ArgoCD → sampleapi-dev (auto-sync)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argocd-deployer-binding
+  namespace: sampleapi-dev
+  labels:
+    team: devsecops
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: argocd-deployer
+subjects:
+  # OpenShift GitOps operator SA in openshift-gitops namespace
+  - kind: ServiceAccount
+    name: openshift-gitops-argocd-application-controller
+    namespace: openshift-gitops
+---
+# ArgoCD → sampleapi-sit (manual sync)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argocd-deployer-binding
+  namespace: sampleapi-sit
+  labels:
+    team: devsecops
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: argocd-deployer
+subjects:
+  - kind: ServiceAccount
+    name: openshift-gitops-argocd-application-controller
+    namespace: openshift-gitops
+---
+# ArgoCD → sampleapi-uat (manual sync)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argocd-deployer-binding
+  namespace: sampleapi-uat
+  labels:
+    team: devsecops
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: argocd-deployer
+subjects:
+  - kind: ServiceAccount
+    name: openshift-gitops-argocd-application-controller
+    namespace: openshift-gitops
+---
+# ArgoCD → sampleapi-prod (manual sync)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argocd-deployer-binding
+  namespace: sampleapi-prod
+  labels:
+    team: devsecops
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: argocd-deployer
+subjects:
+  - kind: ServiceAccount
+    name: openshift-gitops-argocd-application-controller
+    namespace: openshift-gitops
+---
+# --- Jenkins deployer bindings ---
+
+# Jenkins SA → devsecops-tools (manage agent pods, builds)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jenkins-deployer-binding
+  namespace: devsecops-tools
+  labels:
+    team: devsecops
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: jenkins-deployer
+subjects:
+  - kind: ServiceAccount
+    name: jenkins-sa
+    namespace: devsecops-tools
+---
+# Jenkins SA → sampleapi-dev (push images, check deployments)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jenkins-deployer-binding
+  namespace: sampleapi-dev
+  labels:
+    team: devsecops
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: jenkins-deployer
+subjects:
+  - kind: ServiceAccount
+    name: jenkins-sa
+    namespace: devsecops-tools
+---
+# Jenkins SA → sampleapi-sit
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jenkins-deployer-binding
+  namespace: sampleapi-sit
+  labels:
+    team: devsecops
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: jenkins-deployer
+subjects:
+  - kind: ServiceAccount
+    name: jenkins-sa
+    namespace: devsecops-tools
+---
+# Jenkins SA → sampleapi-uat
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jenkins-deployer-binding
+  namespace: sampleapi-uat
+  labels:
+    team: devsecops
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: jenkins-deployer
+subjects:
+  - kind: ServiceAccount
+    name: jenkins-sa
+    namespace: devsecops-tools
+---
+# Jenkins SA → sampleapi-prod
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jenkins-deployer-binding
+  namespace: sampleapi-prod
+  labels:
+    team: devsecops
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: jenkins-deployer
+subjects:
+  - kind: ServiceAccount
+    name: jenkins-sa
+    namespace: devsecops-tools
+---
+# --- Image puller bindings ---
+# Allow app namespaces to pull images from the internal registry
+# (needed when images are stored in sampleapi-dev and promoted)
+
+# system:image-puller for sampleapi-sit → sampleapi-dev images
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: image-puller-sit
+  namespace: sampleapi-dev
+  labels:
+    team: devsecops
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:image-puller
+subjects:
+  - kind: ServiceAccount
+    name: sampleapi-sa
+    namespace: sampleapi-sit
+  - kind: ServiceAccount
+    name: default
+    namespace: sampleapi-sit
+---
+# system:image-puller for sampleapi-uat → sampleapi-dev images
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: image-puller-uat
+  namespace: sampleapi-dev
+  labels:
+    team: devsecops
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:image-puller
+subjects:
+  - kind: ServiceAccount
+    name: sampleapi-sa
+    namespace: sampleapi-uat
+  - kind: ServiceAccount
+    name: default
+    namespace: sampleapi-uat
+---
+# system:image-puller for sampleapi-prod → sampleapi-dev images
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: image-puller-prod
+  namespace: sampleapi-dev
+  labels:
+    team: devsecops
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:image-puller
+subjects:
+  - kind: ServiceAccount
+    name: sampleapi-sa
+    namespace: sampleapi-prod
+  - kind: ServiceAccount
+    name: default
+    namespace: sampleapi-prod

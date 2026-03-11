@@ -1,0 +1,108 @@
+{
+  "_comment": "infra/phase13/acs-policies/runtime-detect-cryptominer.json",
+  "_comment2": "ACS Runtime policy: detect cryptocurrency mining processes",
+  "_comment3": "Action: kill pod immediately and alert",
+  "policies": [
+    {
+      "name": "DevSecOps - Detect Cryptocurrency Mining (Runtime)",
+      "description": "Detects processes commonly associated with cryptocurrency mining (xmrig, minerd, cpuminer, stratum+tcp connections) and kills the pod immediately. This indicates a compromised container.",
+      "rationale": "Cryptocurrency miners in containers indicate compromise — either through a supply chain attack or runtime exploitation. Immediate pod termination prevents resource abuse and limits lateral movement.",
+      "remediation": "Investigate the pod that was killed: check image provenance, review deployment logs, scan the image for backdoors. Rotate any credentials that were accessible to the compromised pod.",
+      "categories": [
+        "Anomalous Activity"
+      ],
+      "lifecycleStages": [
+        "RUNTIME"
+      ],
+      "severity": "CRITICAL_SEVERITY",
+      "enforcementActions": [
+        "KILL_POD_ENFORCEMENT"
+      ],
+      "eventSource": "DEPLOYMENT_EVENT",
+      "policySections": [
+        {
+          "sectionName": "Crypto Mining Process Detection",
+          "policyGroups": [
+            {
+              "fieldName": "Process Name",
+              "booleanOperator": "OR",
+              "negate": false,
+              "values": [
+                {
+                  "value": "xmrig"
+                },
+                {
+                  "value": "minerd"
+                },
+                {
+                  "value": "cpuminer"
+                },
+                {
+                  "value": "cryptonight"
+                },
+                {
+                  "value": "minergate"
+                },
+                {
+                  "value": "ethminer"
+                },
+                {
+                  "value": "nbminer"
+                },
+                {
+                  "value": "t-rex"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "sectionName": "Stratum Protocol Detection",
+          "policyGroups": [
+            {
+              "fieldName": "Process Arguments",
+              "booleanOperator": "OR",
+              "negate": false,
+              "values": [
+                {
+                  "value": "stratum+tcp"
+                },
+                {
+                  "value": "stratum+ssl"
+                },
+                {
+                  "value": "stratum2+tcp"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "scope": [
+        {
+          "cluster": null,
+          "namespace": "sampleapi-dev",
+          "label": null
+        },
+        {
+          "cluster": null,
+          "namespace": "sampleapi-sit",
+          "label": null
+        },
+        {
+          "cluster": null,
+          "namespace": "sampleapi-uat",
+          "label": null
+        },
+        {
+          "cluster": null,
+          "namespace": "sampleapi-prod",
+          "label": null
+        }
+      ],
+      "exclusions": [],
+      "disabled": false,
+      "isDefault": false
+    }
+  ]
+}

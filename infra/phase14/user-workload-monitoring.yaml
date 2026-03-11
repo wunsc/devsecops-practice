@@ -1,0 +1,66 @@
+# infra/phase14/user-workload-monitoring.yaml
+# Enables OpenShift User Workload Monitoring (Prometheus for user namespaces)
+#
+# By default, OCP only monitors platform components (openshift-* namespaces).
+# This ConfigMap enables monitoring for user workloads (sampleapi-dev/sit/uat/prod).
+#
+# APPLY TO: openshift-monitoring namespace (cluster-admin required)
+#   oc apply -f user-workload-monitoring.yaml
+#
+# After applying, OCP will deploy prometheus-user-workload and thanos-ruler
+# in the openshift-user-workload-monitoring namespace.
+#
+# VERIFY:
+#   oc get pods -n openshift-user-workload-monitoring
+#   Expected: prometheus-user-workload-0, thanos-ruler-user-workload-0
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-monitoring-config
+  namespace: openshift-monitoring
+data:
+  config.yaml: |
+    # Enable user workload monitoring
+    enableUserWorkload: true
+
+    # Prometheus retention for platform monitoring
+    prometheusK8s:
+      retention: 15d
+      resources:
+        requests:
+          cpu: 200m
+          memory: 1Gi
+        limits:
+          cpu: "1"
+          memory: 4Gi
+
+---
+# Optional: Configure user workload monitoring settings
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: user-workload-monitoring-config
+  namespace: openshift-user-workload-monitoring
+data:
+  config.yaml: |
+    # Prometheus for user workloads
+    prometheus:
+      retention: 15d
+      resources:
+        requests:
+          cpu: 100m
+          memory: 512Mi
+        limits:
+          cpu: 500m
+          memory: 2Gi
+
+    # Thanos Ruler for user workload alerting rules
+    thanosRuler:
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          cpu: 200m
+          memory: 512Mi

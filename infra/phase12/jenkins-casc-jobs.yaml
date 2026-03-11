@@ -1,0 +1,218 @@
+# infra/phase12/jenkins-casc-jobs.yaml
+# Jenkins Job DSL definitions — service-parameterized pattern
+#
+# ARCHITECTURE:
+#   Each service gets 3 pipeline jobs (T1 MR, T2 Merge, T3 Tag).
+#   Each job passes service: '{service}' to the shared library orchestrator.
+#   One shared T4 job watches app-gitops for promotion MR merges.
+#
+# ADDING A NEW SERVICE:
+#   1. Copy a service block (3 jobs: {service}-mr, {service}-merge, {service}-tag)
+#   2. Replace the service name in job name, displayName, description, and orchestrator call
+#   3. Add configureForService() case in PipelineConfig.groovy
+#   4. Create the service's GitLab repo (devsecops/{service}-source)
+#   5. Create webhooks: bash setup-webhooks.sh (set SERVICE_NAME and GITLAB_PROJECT_ID)
+#
+# WEBHOOK ENDPOINTS (GitLab -> Jenkins):
+#   SampleApi:        /project/sampleapi-mr, /project/sampleapi-merge, /project/sampleapi-tag
+#   NotificationApi:  /project/notificationapi-mr, /project/notificationapi-merge, /project/notificationapi-tag
+#   Promotion (shared): /project/sampleapi-promote
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jenkins-casc-jobs
+  namespace: devsecops-tools
+  labels:
+    team: devsecops
+    app: jenkins
+    component: job-definitions
+data:
+  jobs.yaml: |
+    jobs:
+      # ══════════════════════════════════════════════════════════
+      # SERVICE: sampleapi
+      # Repo: devsecops/app-source
+      # ══════════════════════════════════════════════════════════
+
+      - script: |
+          pipelineJob('sampleapi-mr') {
+            description('T1: MR Validation for SampleApi — unit tests, SAST, SCA')
+            displayName('[SampleApi] MR Validation')
+            properties {
+              gitLabConnection { gitLabConnection('gitlab') }
+            }
+            triggers {
+              gitlabPush {
+                buildOnMergeRequestEvents(true)
+                buildOnPushEvents(false)
+                enableCiSkip(true)
+                setBuildDescription(true)
+                rebuildOpenMergeRequest('source')
+              }
+            }
+            definition {
+              cps {
+                script("""\
+                  @Library('devsecops-shared-lib@main') _
+                  pipelineMR(service: 'sampleapi')
+                """.stripIndent())
+                sandbox(true)
+              }
+            }
+            logRotator { numToKeep(20) }
+          }
+
+      - script: |
+          pipelineJob('sampleapi-merge') {
+            description('T2: Merge to Main for SampleApi — build, scan, push, deploy DEV')
+            displayName('[SampleApi] Merge to Main')
+            properties {
+              gitLabConnection { gitLabConnection('gitlab') }
+            }
+            triggers {
+              gitlabPush {
+                buildOnMergeRequestEvents(false)
+                buildOnPushEvents(true)
+                enableCiSkip(true)
+                setBuildDescription(true)
+                includeBranches('main')
+              }
+            }
+            definition {
+              cps {
+                script("""\
+                  @Library('devsecops-shared-lib@main') _
+                  pipelineMerge(service: 'sampleapi')
+                """.stripIndent())
+                sandbox(true)
+              }
+            }
+            logRotator { numToKeep(30) }
+          }
+
+      - script: |
+          pipelineJob('sampleapi-tag') {
+            description('T3: Tag Release for SampleApi — full validation + DAST, release image')
+            displayName('[SampleApi] Tag Release')
+            definition {
+              cps {
+                script("""\
+                  @Library('devsecops-shared-lib@main') _
+                  pipelineTag(service: 'sampleapi')
+                """.stripIndent())
+                sandbox(true)
+              }
+            }
+            logRotator { numToKeep(20) }
+          }
+
+      # ══════════════════════════════════════════════════════════
+      # SERVICE: notificationapi
+      # Repo: devsecops/notificationapi-source
+      # ══════════════════════════════════════════════════════════
+
+      - script: |
+          pipelineJob('notificationapi-mr') {
+            description('T1: MR Validation for NotificationApi — unit tests, SAST, SCA')
+            displayName('[NotificationApi] MR Validation')
+            properties {
+              gitLabConnection { gitLabConnection('gitlab') }
+            }
+            triggers {
+              gitlabPush {
+                buildOnMergeRequestEvents(true)
+                buildOnPushEvents(false)
+                enableCiSkip(true)
+                setBuildDescription(true)
+                rebuildOpenMergeRequest('source')
+              }
+            }
+            definition {
+              cps {
+                script("""\
+                  @Library('devsecops-shared-lib@main') _
+                  pipelineMR(service: 'notificationapi')
+                """.stripIndent())
+                sandbox(true)
+              }
+            }
+            logRotator { numToKeep(20) }
+          }
+
+      - script: |
+          pipelineJob('notificationapi-merge') {
+            description('T2: Merge to Main for NotificationApi — build, scan, push, deploy DEV')
+            displayName('[NotificationApi] Merge to Main')
+            properties {
+              gitLabConnection { gitLabConnection('gitlab') }
+            }
+            triggers {
+              gitlabPush {
+                buildOnMergeRequestEvents(false)
+                buildOnPushEvents(true)
+                enableCiSkip(true)
+                setBuildDescription(true)
+                includeBranches('main')
+              }
+            }
+            definition {
+              cps {
+                script("""\
+                  @Library('devsecops-shared-lib@main') _
+                  pipelineMerge(service: 'notificationapi')
+                """.stripIndent())
+                sandbox(true)
+              }
+            }
+            logRotator { numToKeep(30) }
+          }
+
+      - script: |
+          pipelineJob('notificationapi-tag') {
+            description('T3: Tag Release for NotificationApi — full validation + DAST, release image')
+            displayName('[NotificationApi] Tag Release')
+            definition {
+              cps {
+                script("""\
+                  @Library('devsecops-shared-lib@main') _
+                  pipelineTag(service: 'notificationapi')
+                """.stripIndent())
+                sandbox(true)
+              }
+            }
+            logRotator { numToKeep(20) }
+          }
+
+      # ══════════════════════════════════════════════════════════
+      # SHARED: T4 GitOps Promotion Pipeline
+      # Repo: devsecops/app-gitops (shared across all services)
+      # ══════════════════════════════════════════════════════════
+
+      - script: |
+          pipelineJob('sampleapi-promote') {
+            description('T4: GitOps Promotion — ArgoCD sync triggered by MR merge on app-gitops')
+            displayName('[Shared] GitOps Promotion')
+            properties {
+              gitLabConnection { gitLabConnection('gitlab') }
+            }
+            triggers {
+              gitlabPush {
+                buildOnMergeRequestEvents(false)
+                buildOnPushEvents(true)
+                enableCiSkip(true)
+                setBuildDescription(true)
+                includeBranches('main')
+              }
+            }
+            definition {
+              cps {
+                script("""\
+                  @Library('devsecops-shared-lib@main') _
+                  pipelinePromote()
+                """.stripIndent())
+                sandbox(true)
+              }
+            }
+            logRotator { numToKeep(30) }
+          }

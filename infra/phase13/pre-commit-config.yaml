@@ -1,0 +1,76 @@
+# infra/phase13/pre-commit-config.yaml
+# Pre-commit hooks configuration for the app-source repository
+#
+# Copy to app-source/.pre-commit-config.yaml
+#
+# Install: pip install pre-commit && pre-commit install
+# Run:     pre-commit run --all-files
+#
+# These hooks run locally before each commit to catch issues early.
+---
+repos:
+  # --- Secret Detection (gitleaks) ---
+  # Scans staged files for leaked credentials, tokens, and keys
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.1
+    hooks:
+      - id: gitleaks
+        name: "Secret Detection (gitleaks)"
+        description: "Detect hardcoded secrets, credentials, and API keys"
+        # Uses .gitleaks.toml in repo root for custom rules and allowlist
+        args: ["--config", ".gitleaks.toml"]
+
+  # --- Trailing whitespace and file hygiene ---
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        name: "Trim trailing whitespace"
+        args: ["--markdown-linebreak-ext=md"]
+      - id: end-of-file-fixer
+        name: "Ensure files end with newline"
+      - id: check-yaml
+        name: "Validate YAML syntax"
+        args: ["--allow-multiple-documents"]
+      - id: check-json
+        name: "Validate JSON syntax"
+      - id: check-merge-conflict
+        name: "Check for merge conflict markers"
+      - id: check-added-large-files
+        name: "Block large files (>500KB)"
+        args: ["--maxkb=500"]
+      - id: detect-private-key
+        name: "Detect private keys"
+
+  # --- .NET Code Formatting ---
+  # Requires dotnet CLI installed locally
+  - repo: local
+    hooks:
+      - id: dotnet-format
+        name: ".NET Code Format Check"
+        description: "Check .NET code formatting (dotnet format --verify-no-changes)"
+        entry: dotnet format --verify-no-changes --no-restore
+        language: system
+        files: '\.cs$'
+        pass_filenames: false
+        # Only run if dotnet CLI is available
+        verbose: true
+
+  # --- YAML Lint ---
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.33.0
+    hooks:
+      - id: yamllint
+        name: "YAML Lint"
+        args:
+          - "-d"
+          - "{extends: relaxed, rules: {line-length: {max: 200}, truthy: disable}}"
+        files: '\.(yaml|yml)$'
+
+  # --- Markdown Lint ---
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.38.0
+    hooks:
+      - id: markdownlint
+        name: "Markdown Lint"
+        args: ["--disable", "MD013", "MD033", "MD041", "--"]

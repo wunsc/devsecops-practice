@@ -1,0 +1,39 @@
+# infra/phase3/sonarqube-configmap.yaml
+# SonarQube configuration properties
+# Database connection is configured via environment variables (from secrets)
+# This ConfigMap holds additional sonar.properties settings
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sonarqube-config
+  namespace: devsecops-tools
+  labels:
+    team: devsecops
+    component: sonarqube
+data:
+  # Additional SonarQube properties
+  # Database connection is set via SONAR_JDBC_URL, SONAR_JDBC_USERNAME, SONAR_JDBC_PASSWORD env vars
+  sonar.properties: |
+    # Web server settings
+    sonar.web.port=9000
+    sonar.web.context=/
+
+    # Search server (Elasticsearch) settings
+    # Limit ES heap for constrained environments
+    sonar.search.javaOpts=-Xmx512m -Xms512m -XX:MaxDirectMemorySize=256m
+
+    # CE (Compute Engine) settings for background task processing
+    sonar.ce.javaOpts=-Xmx512m -Xms128m
+
+    # Web server Java options
+    sonar.web.javaOpts=-Xmx512m -Xms128m
+
+    # Telemetry — disable in air-gapped / internal environments
+    sonar.telemetry.enable=false
+
+    # Force authentication (no anonymous access to SonarQube)
+    sonar.forceAuthentication=true
+
+    # Log level
+    sonar.log.level=INFO

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  build-config/dependency-check-suppression.xml
+  OWASP Dependency-Check false positive suppressions
+
+  Add suppressions here for known false positives in NuGet dependencies.
+  Each suppression should include:
+    - The CVE or vulnerability ID being suppressed
+    - A clear note explaining WHY it is a false positive
+    - The date the suppression was reviewed
+    - Who reviewed it
+
+  Reference: https://jeremylong.github.io/DependencyCheck/general/suppression.html
+
+  Usage in pipeline:
+    dependency-check scan . suppression build-config/dependency-check-suppression.xml
+-->
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
+
+    <!-- Example suppression (uncomment and modify as needed):
+
+    <suppress>
+        <notes><![CDATA[
+            False positive: CVE-2024-XXXXX does not affect our usage of this library.
+            The vulnerability requires feature X which we do not use.
+            Reviewed by: DevSecOps Team
+            Reviewed on: 2024-01-01
+        ]]></notes>
+        <packageUrl regex="true">^pkg:nuget/ExamplePackage@.*$</packageUrl>
+        <cve>CVE-2024-XXXXX</cve>
+    </suppress>
+
+    -->
+
+    <!-- Suppress false positives for .NET runtime components that are -->
+    <!-- reported against the SDK but not the runtime -->
+    <suppress>
+        <notes><![CDATA[
+            .NET SDK components are not shipped in the runtime container image.
+            The multi-stage Dockerfile uses mcr.microsoft.com/dotnet/aspnet:8.0
+            which does not include SDK tools. These CVEs apply only to the SDK.
+            Reviewed by: DevSecOps Team
+        ]]></notes>
+        <packageUrl regex="true">^pkg:nuget/Microsoft\.NET\.Sdk.*$</packageUrl>
+        <vulnerabilityName regex="true">^CVE-.*$</vulnerabilityName>
+    </suppress>
+
+</suppressions>

@@ -1,0 +1,37 @@
+# infra/phase19/obc-loki.yaml
+# ObjectBucketClaim for LokiStack log storage
+#
+# An ObjectBucketClaim (OBC) is like a PVC but for S3-compatible object storage.
+# When ODF processes this claim, it automatically:
+#   1. Creates an S3 bucket in NooBaa (name: loki-logs-<random-suffix>)
+#   2. Creates a ConfigMap "loki-bucket" with BUCKET_NAME, BUCKET_HOST, BUCKET_PORT
+#   3. Creates a Secret "loki-bucket" with AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+#
+# LokiStack references the Secret directly — no manual S3 credential management.
+#
+# PREREQUISITE:
+#   - ODF StorageCluster in Ready state
+#   - NooBaa pods running in openshift-storage
+#   - StorageClass "openshift-storage.noobaa.io" exists
+#
+# APPLY:
+#   oc apply -f obc-loki.yaml
+#
+# VERIFY:
+#   oc get obc loki-bucket -n openshift-logging
+#   # Expected: STATUS=Bound
+#
+#   oc get secret loki-bucket -n openshift-logging -o jsonpath='{.data}' | jq -r 'keys'
+#   # Expected: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"]
+#
+#   oc get configmap loki-bucket -n openshift-logging -o jsonpath='{.data}'
+#   # Expected: {"BUCKET_HOST":"...","BUCKET_NAME":"loki-logs-...","BUCKET_PORT":"..."}
+---
+apiVersion: objectbucket.io/v1alpha1
+kind: ObjectBucketClaim
+metadata:
+  name: loki-bucket
+  namespace: openshift-logging
+spec:
+  generateBucketName: loki-logs                # ODF appends random suffix: loki-logs-abc123
+  storageClassName: openshift-storage.noobaa.io

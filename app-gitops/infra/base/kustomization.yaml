@@ -1,0 +1,12 @@
+# infra/base/kustomization.yaml
+# Shared infrastructure: ServiceAccount, PostgreSQL, Redis
+# ConfigMaps and Secrets are per-service (in services/{svc}/overlays/{env}/)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- serviceaccount.yaml
+- postgresql/statefulset.yaml
+- postgresql/service.yaml
+- redis/statefulset.yaml
+- redis/service.yaml

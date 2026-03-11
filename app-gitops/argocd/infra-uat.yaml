@@ -1,0 +1,31 @@
+# argocd/infra-uat.yaml
+# ArgoCD Application: Shared infra in UAT — manual sync
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: infra-uat
+  namespace: openshift-gitops
+  labels:
+    team: devsecops
+    app: infra
+    environment: uat
+spec:
+  project: devsecops
+  source:
+    repoURL: "https://gitlab-devsecops-gitlab.apps.cluster-pmqwq.pmqwq.sandbox270.opentlc.com/devsecops/app-gitops.git"
+    targetRevision: main
+    path: infra/overlays/uat
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: sampleapi-uat
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=false
+      - PruneLast=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 1m

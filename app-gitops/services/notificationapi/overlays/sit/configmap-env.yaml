@@ -1,0 +1,15 @@
+# services/notificationapi/overlays/sit/configmap-env.yaml
+# SIT environment configuration for NotificationApi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: notificationapi-env
+data:
+  ASPNETCORE_ENVIRONMENT: "Staging"
+  DOTNET_RUNNING_IN_CONTAINER: "true"
+  REDIS_URL: "redis.sampleapi-sit.svc:6379"
+  LOGGING__LOGLEVEL__DEFAULT: "Information"
+  LOGGING__LOGLEVEL__MICROSOFT_ASPNETCORE: "Warning"
+  # OpenTelemetry tracing (Phase 22) — auto-instrumentation injects OTEL_* env vars
+  # via the Instrumentation CR webhook. No need to set them here.

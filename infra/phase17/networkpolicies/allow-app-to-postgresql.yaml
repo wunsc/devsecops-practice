@@ -1,0 +1,96 @@
+# infra/phase17/networkpolicies/allow-app-to-postgresql.yaml
+# Allow ingress to PostgreSQL pods (port 5432) ONLY from SampleApi pods
+# NotificationApi does NOT need direct database access — it uses Redis only
+# Applied to: sampleapi-dev, sampleapi-sit, sampleapi-uat, sampleapi-prod
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-app-to-postgresql
+  namespace: sampleapi-dev
+  labels:
+    team: devsecops
+    policy: allow-app-to-postgresql
+spec:
+  podSelector:
+    matchLabels:
+      app: postgresql  # Target: PostgreSQL pods
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: sampleapi  # Source: only SampleApi pods
+      ports:
+        - protocol: TCP
+          port: 5432
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-app-to-postgresql
+  namespace: sampleapi-sit
+  labels:
+    team: devsecops
+    policy: allow-app-to-postgresql
+spec:
+  podSelector:
+    matchLabels:
+      app: postgresql
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: sampleapi
+      ports:
+        - protocol: TCP
+          port: 5432
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-app-to-postgresql
+  namespace: sampleapi-uat
+  labels:
+    team: devsecops
+    policy: allow-app-to-postgresql
+spec:
+  podSelector:
+    matchLabels:
+      app: postgresql
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: sampleapi
+      ports:
+        - protocol: TCP
+          port: 5432
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-app-to-postgresql
+  namespace: sampleapi-prod
+  labels:
+    team: devsecops
+    policy: allow-app-to-postgresql
+spec:
+  podSelector:
+    matchLabels:
+      app: postgresql
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: sampleapi
+      ports:
+        - protocol: TCP
+          port: 5432
+  policyTypes:
+    - Ingress

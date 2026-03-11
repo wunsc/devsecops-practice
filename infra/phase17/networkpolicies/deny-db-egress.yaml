@@ -1,0 +1,189 @@
+# infra/phase17/networkpolicies/deny-db-egress.yaml
+# Restrict egress from PostgreSQL and Redis pods
+# Databases should not initiate outbound connections except DNS resolution
+# This limits blast radius if a database pod is compromised
+# Applied to: sampleapi-dev, sampleapi-sit, sampleapi-uat, sampleapi-prod
+#
+# PostgreSQL egress deny (4 documents) + Redis egress deny (4 documents) = 8 total
+---
+# ============================================================
+# PostgreSQL egress deny — sampleapi-dev
+# ============================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-postgresql-egress
+  namespace: sampleapi-dev
+  labels:
+    team: devsecops
+    policy: deny-db-egress
+spec:
+  podSelector:
+    matchLabels:
+      app: postgresql
+  egress:
+    # Allow DNS resolution only (kube-dns on port 53)
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+  policyTypes:
+    - Egress
+---
+# PostgreSQL egress deny — sampleapi-sit
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-postgresql-egress
+  namespace: sampleapi-sit
+  labels:
+    team: devsecops
+    policy: deny-db-egress
+spec:
+  podSelector:
+    matchLabels:
+      app: postgresql
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+  policyTypes:
+    - Egress
+---
+# PostgreSQL egress deny — sampleapi-uat
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-postgresql-egress
+  namespace: sampleapi-uat
+  labels:
+    team: devsecops
+    policy: deny-db-egress
+spec:
+  podSelector:
+    matchLabels:
+      app: postgresql
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+  policyTypes:
+    - Egress
+---
+# PostgreSQL egress deny — sampleapi-prod
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-postgresql-egress
+  namespace: sampleapi-prod
+  labels:
+    team: devsecops
+    policy: deny-db-egress
+spec:
+  podSelector:
+    matchLabels:
+      app: postgresql
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+  policyTypes:
+    - Egress
+---
+# ============================================================
+# Redis egress deny — sampleapi-dev
+# ============================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-redis-egress
+  namespace: sampleapi-dev
+  labels:
+    team: devsecops
+    policy: deny-db-egress
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  egress:
+    # Allow DNS resolution only (kube-dns on port 53)
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+  policyTypes:
+    - Egress
+---
+# Redis egress deny — sampleapi-sit
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-redis-egress
+  namespace: sampleapi-sit
+  labels:
+    team: devsecops
+    policy: deny-db-egress
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+  policyTypes:
+    - Egress
+---
+# Redis egress deny — sampleapi-uat
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-redis-egress
+  namespace: sampleapi-uat
+  labels:
+    team: devsecops
+    policy: deny-db-egress
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+  policyTypes:
+    - Egress
+---
+# Redis egress deny — sampleapi-prod
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-redis-egress
+  namespace: sampleapi-prod
+  labels:
+    team: devsecops
+    policy: deny-db-egress
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+  policyTypes:
+    - Egress

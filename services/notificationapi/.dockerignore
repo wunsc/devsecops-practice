@@ -1,0 +1,38 @@
+# app-source/.dockerignore
+# Exclude files not needed in the Docker build context
+# This file MUST be in the build context root (app-source/)
+# The Dockerfile is in build-config/ (Rule 2), but context is app-source/
+
+# Build artifacts
+**/bin/
+**/obj/
+**/publish/
+**/out/
+
+# IDE files
+**/.vs/
+**/.vscode/
+**/.idea/
+**/*.user
+**/*.suo
+
+# Git
+.git/
+.gitignore
+
+# Test results and coverage
+**/test-results/
+**/coverage-results/
+**/TestResults/
+
+# Documentation
+*.md
+LICENSE
+
+# Security configs (not needed in image)
+.gitleaks.toml
+.pre-commit-config.yaml
+
+# OS files
+**/.DS_Store
+**/Thumbs.db

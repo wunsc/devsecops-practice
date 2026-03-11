@@ -1,0 +1,53 @@
+# infra/phase5/acs-policies/block-critical-cves.yaml
+# Build-time policy: Block images with critical CVEs (CVSS >= 9.0)
+# Enforced during CI pipeline via roxctl image check
+# This policy prevents images with critical vulnerabilities from being deployed
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: acs-policy-block-critical-cves
+  namespace: stackrox
+  labels:
+    team: devsecops
+    acs-policy: "true"
+    policy-lifecycle: build
+  annotations:
+    description: |
+      Block container images with critical CVEs (CVSS >= 9.0).
+      Applied at build time via roxctl in the Jenkins pipeline.
+      The scanACSImage.groovy shared library function runs:
+        roxctl image check --image <image> --policy "Block Critical CVEs"
+      If any critical CVE is found, the pipeline fails.
+data:
+  # ACS policy JSON — import via ACS API or roxctl
+  # POST to: https://<central>/v1/policies
+  policy.json: |
+    {
+      "name": "Block Critical CVEs",
+      "description": "Block images with critical vulnerabilities (CVSS >= 9.0). Enforced at build time in CI pipeline.",
+      "rationale": "Critical CVEs pose an immediate risk and must be remediated before deployment.",
+      "remediation": "Update the affected package to a version that fixes the CVE, or use a different base image.",
+      "categories": ["Vulnerability Management"],
+      "lifecycleStages": ["BUILD", "DEPLOY"],
+      "severity": "CRITICAL_SEVERITY",
+      "enforcementActions": ["FAIL_BUILD_ENFORCEMENT"],
+      "disabled": false,
+      "policySections": [
+        {
+          "sectionName": "Critical CVSS Score",
+          "policyGroups": [
+            {
+              "fieldName": "CVSS",
+              "values": [
+                {
+                  "value": ">= 9.0"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "scope": [],
+      "exclusions": []
+    }

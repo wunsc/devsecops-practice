@@ -1,0 +1,44 @@
+# infra/phase19/loki-operator-subscription.yaml
+# Loki Operator — manages LokiStack instances for log storage.
+#
+# The Loki Operator is separate from the Cluster Logging Operator:
+#   - Loki Operator: manages LokiStack (log storage backend)
+#   - Cluster Logging Operator: manages ClusterLogForwarder (log collection + routing)
+#
+# Both operators work together:
+#   Vector (collector) → ClusterLogForwarder → LokiStack (storage) → OCP Console (query)
+#
+# APPLY:
+#   oc apply -f loki-operator-subscription.yaml
+#
+# VERIFY:
+#   oc get csv -n openshift-logging | grep loki
+#   # Expected: loki-operator.v6.x.y — Succeeded
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openshift-logging
+  labels:
+    openshift.io/cluster-monitoring: "true"    # Enable monitoring for logging namespace
+  annotations:
+    openshift.io/description: "OpenShift Logging — LokiStack + Vector log collection"
+---
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: openshift-logging-operatorgroup
+  namespace: openshift-logging
+spec: {}                                       # AllNamespaces — required by Loki Operator
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: loki-operator
+  namespace: openshift-logging
+spec:
+  channel: stable-6.2                         # OCP 4.20 supports 6.2/6.3/6.4
+  installPlanApproval: Automatic
+  name: loki-operator
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace

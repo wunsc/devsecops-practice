@@ -1,0 +1,83 @@
+# infra/phase7/jenkins-agent-pod-template.yaml
+# Kubernetes plugin pod template for Jenkins agent pods
+# This is an alternative/override to the JCasC cloud template
+# Can be applied as a ConfigMap and referenced in JCasC
+#
+# The agent pod runs with:
+#   - Custom image with all DevSecOps tools
+#   - Privileged security context (for Podman builds)
+#   - vfs storage driver (no fuse device on OpenShift)
+#   - Ephemeral volumes for /tmp and /var/lib/containers
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jenkins-agent-pod-template
+  namespace: devsecops-tools
+  labels:
+    team: devsecops
+    app: jenkins
+    component: agent-template
+data:
+  pod-template.yaml: |
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      labels:
+        app: jenkins-agent
+        team: devsecops
+    spec:
+      serviceAccountName: jenkins-sa
+      securityContext:
+        runAsUser: 0
+      containers:
+        - name: jnlp
+          image: image-registry.openshift-image-registry.svc:5000/devsecops-tools/jenkins-agent-devsecops:latest
+          workingDir: /home/jenkins/agent
+          tty: true
+          env:
+            # Podman storage driver — must be vfs on OpenShift
+            - name: STORAGE_DRIVER
+              value: "vfs"
+            # .NET telemetry opt-out
+            - name: DOTNET_CLI_TELEMETRY_OPTOUT
+              value: "1"
+            - name: DOTNET_NOLOGO
+              value: "true"
+            # SonarQube URL (used by scanSonarQube.groovy)
+            - name: SONARQUBE_URL
+              value: "https://sonarqube-devsecops-tools.apps.cluster-pmqwq.pmqwq.sandbox270.opentlc.com"
+            # ACS Central URL (used by scanACSImage.groovy)
+            - name: ACS_CENTRAL_URL
+              value: "https://central-stackrox.apps.cluster-pmqwq.pmqwq.sandbox270.opentlc.com"
+            # ArgoCD URL (used by deployToEnvironment.groovy)
+            - name: ARGOCD_SERVER
+              value: "openshift-gitops-server-openshift-gitops.apps.cluster-pmqwq.pmqwq.sandbox270.opentlc.com"
+            # Internal registry (used by pushToRegistry.groovy)
+            - name: IMAGE_REGISTRY
+              value: "image-registry.openshift-image-registry.svc:5000"
+            # GitLab URL (used by checkoutSource.groovy, reportToGitLab.groovy)
+            - name: GITLAB_URL
+              value: "https://gitlab-devsecops-gitlab.apps.cluster-pmqwq.pmqwq.sandbox270.opentlc.com"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: podman-storage
+              mountPath: /var/lib/containers
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: podman-storage
+          emptyDir: {}
+      # Tolerate any taints for scheduling flexibility
+      tolerations:
+        - operator: Exists

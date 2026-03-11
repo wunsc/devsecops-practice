@@ -1,0 +1,30 @@
+# app-gitops/overlays/production/patch-sampleapi.yaml
+# PRODUCTION-specific: 3 replicas, higher resources, anti-affinity
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sampleapi
+spec:
+  replicas: 3
+  template:
+    spec:
+      # Anti-affinity — spread pods across nodes for HA
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: sampleapi
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: sampleapi
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi

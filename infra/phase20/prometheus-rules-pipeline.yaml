@@ -1,0 +1,133 @@
+# infra/phase20/prometheus-rules-pipeline.yaml
+# Pipeline and CI/CD alerting rules.
+#
+# These alerts monitor Jenkins pipeline health via Prometheus metrics exposed
+# by the Jenkins Prometheus Metrics plugin. If the plugin is not installed,
+# these rules will have no data (they won't error, just won't fire).
+#
+# Jenkins Prometheus plugin exposes metrics at /prometheus/ including:
+#   - jenkins_builds_total: total builds by result (SUCCESS, FAILURE, etc.)
+#   - jenkins_builds_duration_milliseconds: build duration
+#   - jenkins_queue_size_value: number of builds waiting in queue
+#   - jenkins_plugins_active: number of active plugins
+#
+# Additionally, this monitors ArgoCD sync status via Kubernetes metrics.
+#
+# DEPLOY TO: devsecops-tools namespace (for Jenkins metrics)
+# and each app namespace (for ArgoCD Application metrics).
+#   oc apply -f prometheus-rules-pipeline.yaml -n devsecops-tools
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: pipeline-alerts
+  labels:
+    app: jenkins
+    team: devsecops
+    prometheus: user-workload
+spec:
+  groups:
+    - name: jenkins-pipeline-health
+      rules:
+        # Jenkins build queue backing up — builds waiting > 5 for 10 minutes
+        - alert: JenkinsBuildQueueBacklog
+          expr: |
+            jenkins_queue_size_value > 5
+          for: 10m
+          labels:
+            severity: warning
+            team: devsecops
+          annotations:
+            summary: "Jenkins build queue has {{ $value }} items"
+            description: >
+              Jenkins has {{ $value }} builds waiting in the queue for over 10 minutes.
+              Agent pods may not be spinning up. Check:
+              oc get pods -n devsecops-tools -l jenkins=agent
+
+        # High pipeline failure rate (> 50% of builds failing over 1 hour)
+        - alert: PipelineFailureRateHigh
+          expr: |
+            (
+              sum(increase(jenkins_builds_total{result="FAILURE"}[1h]))
+              /
+              sum(increase(jenkins_builds_total[1h]))
+            ) > 0.5
+          for: 5m
+          labels:
+            severity: warning
+            team: devsecops
+          annotations:
+            summary: "Pipeline failure rate > 50%"
+            description: >
+              More than 50% of Jenkins builds failed in the last hour.
+              Check Jenkins logs and recent code changes.
+
+        # Jenkins pod not ready (controller down)
+        - alert: JenkinsDown
+          expr: |
+            kube_deployment_status_available_replicas{
+              namespace="devsecops-tools",
+              deployment="jenkins"
+            } == 0
+          for: 5m
+          labels:
+            severity: critical
+            team: devsecops
+          annotations:
+            summary: "Jenkins controller is down"
+            description: >
+              Jenkins deployment has 0 available replicas.
+              No pipelines can execute. Check:
+              oc get pods -n devsecops-tools -l app=jenkins
+
+    - name: argocd-sync-health
+      rules:
+        # ArgoCD Application sync failed
+        - alert: ArgoCDSyncFailed
+          expr: |
+            argocd_app_info{sync_status="OutOfSync", health_status!="Healthy"} == 1
+          for: 30m
+          labels:
+            severity: warning
+            team: devsecops
+          annotations:
+            summary: "ArgoCD app {{ $labels.name }} out of sync"
+            description: >
+              ArgoCD Application {{ $labels.name }} has been out of sync
+              for 30 minutes. Check:
+              argocd app get {{ $labels.name }}
+
+        # ArgoCD Application degraded (sync succeeded but pods unhealthy)
+        - alert: ArgoCDAppDegraded
+          expr: |
+            argocd_app_info{health_status="Degraded"} == 1
+          for: 10m
+          labels:
+            severity: warning
+            team: devsecops
+          annotations:
+            summary: "ArgoCD app {{ $labels.name }} degraded"
+            description: >
+              ArgoCD Application {{ $labels.name }} is synced but health is Degraded.
+              Some pods may be failing. Check:
+              argocd app get {{ $labels.name }} --show-operation
+
+    - name: gitlab-health
+      rules:
+        # GitLab pod not ready
+        - alert: GitLabDown
+          expr: |
+            kube_deployment_status_available_replicas{
+              namespace="devsecops-gitlab",
+              deployment="gitlab-ce"
+            } == 0
+          for: 5m
+          labels:
+            severity: critical
+            team: devsecops
+          annotations:
+            summary: "GitLab CE is down"
+            description: >
+              GitLab CE has 0 available replicas. Source control and webhooks
+              are unavailable. Check:
+              oc get pods -n devsecops-gitlab -l app=gitlab-ce

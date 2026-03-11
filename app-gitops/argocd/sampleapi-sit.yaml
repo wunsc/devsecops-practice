@@ -1,0 +1,31 @@
+# argocd/sampleapi-sit.yaml
+# ArgoCD Application: SampleAPI in SIT — manual sync
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sampleapi-sit
+  namespace: openshift-gitops
+  labels:
+    team: devsecops
+    app: sampleapi
+    environment: sit
+spec:
+  project: devsecops
+  source:
+    repoURL: "https://gitlab-devsecops-gitlab.apps.cluster-pmqwq.pmqwq.sandbox270.opentlc.com/devsecops/app-gitops.git"
+    targetRevision: main
+    path: services/sampleapi/overlays/sit
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: sampleapi-sit
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=false
+      - PruneLast=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 1m

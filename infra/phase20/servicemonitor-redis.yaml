@@ -1,0 +1,57 @@
+# infra/phase20/servicemonitor-redis.yaml
+# ServiceMonitor for Redis metrics.
+#
+# Like PostgreSQL, Redis doesn't natively export Prometheus metrics.
+# Deploy redis_exporter as a sidecar or standalone pod.
+#
+# TO ADD redis_exporter sidecar to Redis StatefulSet:
+#   Add container:
+#     - name: redis-exporter
+#       image: quay.io/oliver006/redis_exporter:v1.58.0
+#       env:
+#         - name: REDIS_ADDR
+#           value: "redis://localhost:6379"
+#         - name: REDIS_PASSWORD
+#           valueFrom:
+#             secretKeyRef: { name: infra-secret, key: REDIS_PASSWORD }
+#       ports:
+#         - containerPort: 9121
+#           name: metrics
+#       resources:
+#         requests:
+#           cpu: 10m
+#           memory: 32Mi
+#         limits:
+#           cpu: 50m
+#           memory: 64Mi
+#
+# Key Redis metrics exposed:
+#   - redis_up: Is Redis reachable?
+#   - redis_connected_clients: Number of connected clients
+#   - redis_memory_used_bytes: Memory usage
+#   - redis_commands_processed_total: Command throughput
+#   - redis_keyspace_hits_total / redis_keyspace_misses_total: Cache hit ratio
+#
+# DEPLOY TO: Each app namespace.
+#   oc apply -f servicemonitor-redis.yaml -n sampleapi-dev
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: redis-monitor
+  labels:
+    app: redis
+    team: devsecops
+spec:
+  selector:
+    matchLabels:
+      app: redis
+
+  endpoints:
+    - port: metrics                            # redis_exporter port (9121)
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+
+  namespaceSelector:
+    matchNames: []

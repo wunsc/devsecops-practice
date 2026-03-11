@@ -1,0 +1,112 @@
+# infra/phase3/sonarqube-postgresql-statefulset.yaml
+# Dedicated PostgreSQL 15 instance for SonarQube
+# Separate from GitLab's PostgreSQL to isolate failure domains
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: sonarqube-postgresql
+  namespace: devsecops-tools
+  labels:
+    team: devsecops
+    app: sonarqube-postgresql
+    component: database
+spec:
+  serviceName: sonarqube-postgresql
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sonarqube-postgresql
+  template:
+    metadata:
+      labels:
+        app: sonarqube-postgresql
+        team: devsecops
+    spec:
+      containers:
+        - name: postgresql
+          image: registry.redhat.io/rhel9/postgresql-15:latest
+          ports:
+            - containerPort: 5432
+              name: postgresql
+              protocol: TCP
+          env:
+            - name: POSTGRESQL_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sonarqube-db-credentials
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRESQL_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: sonarqube-db-credentials
+                  key: SONARQUBE_DB_NAME
+            - name: POSTGRESQL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: sonarqube-db-credentials
+                  key: SONARQUBE_DB_USER
+            - name: POSTGRESQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sonarqube-db-credentials
+                  key: SONARQUBE_DB_PASSWORD
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/pgsql/data
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pg_isready -U sonarqube -d sonarqube
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pg_isready -U sonarqube -d sonarqube
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app: sonarqube-postgresql
+          team: devsecops
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: gp3-csi
+        resources:
+          requests:
+            storage: 10Gi
+---
+# Service for SonarQube's PostgreSQL
+apiVersion: v1
+kind: Service
+metadata:
+  name: sonarqube-postgresql
+  namespace: devsecops-tools
+  labels:
+    team: devsecops
+    app: sonarqube-postgresql
+spec:
+  type: ClusterIP
+  selector:
+    app: sonarqube-postgresql
+  ports:
+    - name: postgresql
+      port: 5432
+      targetPort: 5432
+      protocol: TCP

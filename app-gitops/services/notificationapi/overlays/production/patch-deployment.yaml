@@ -1,0 +1,20 @@
+# app-gitops/overlays/production/patch-notificationapi.yaml
+# PRODUCTION-specific: 2 replicas, higher resources for NotificationAPI
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notificationapi
+spec:
+  replicas: 2
+  template:
+    spec:
+      containers:
+        - name: notificationapi
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

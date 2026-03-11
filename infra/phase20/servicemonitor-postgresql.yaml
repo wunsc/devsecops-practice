@@ -1,0 +1,58 @@
+# infra/phase20/servicemonitor-postgresql.yaml
+# ServiceMonitor for PostgreSQL metrics.
+#
+# PostgreSQL does not natively export Prometheus metrics. Two options:
+#
+# OPTION A (recommended): Deploy pg_exporter sidecar
+#   - Add a pg_exporter container to the PostgreSQL StatefulSet
+#   - Exposes metrics on port 9187 at /metrics
+#   - Requires a Service port named "metrics" pointing to 9187
+#
+# OPTION B (simpler): Use built-in OCP monitoring
+#   - Red Hat PostgreSQL images include basic metrics via /metrics if configured
+#   - Less detailed but zero additional deployment
+#
+# This ServiceMonitor assumes OPTION A — pg_exporter sidecar is added.
+# If pg_exporter is not deployed yet, this ServiceMonitor will have no targets
+# (Prometheus won't error, it just won't scrape anything).
+#
+# TO ADD pg_exporter sidecar to PostgreSQL StatefulSet:
+#   Add container:
+#     - name: pg-exporter
+#       image: quay.io/prometheuscommunity/postgres-exporter:v0.15.0
+#       env:
+#         - name: DATA_SOURCE_URI
+#           value: "localhost:5432/sampleapi?sslmode=disable"
+#         - name: DATA_SOURCE_USER
+#           valueFrom:
+#             secretKeyRef: { name: infra-secret, key: POSTGRESQL_USER }
+#         - name: DATA_SOURCE_PASS
+#           valueFrom:
+#             secretKeyRef: { name: infra-secret, key: POSTGRESQL_PASSWORD }
+#       ports:
+#         - containerPort: 9187
+#           name: metrics
+#
+# DEPLOY TO: Each app namespace.
+#   oc apply -f servicemonitor-postgresql.yaml -n sampleapi-dev
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: postgresql-monitor
+  labels:
+    app: postgresql
+    team: devsecops
+spec:
+  selector:
+    matchLabels:
+      app: postgresql
+
+  endpoints:
+    - port: metrics                            # pg_exporter port (9187)
+      path: /metrics
+      interval: 60s                            # DB metrics don't change as fast — 60s is fine
+      scrapeTimeout: 10s
+
+  namespaceSelector:
+    matchNames: []

@@ -1,0 +1,17 @@
+# infra/phase22/uiplugin-distributed-tracing.yaml
+# UIPlugin CR — enables the distributed tracing UI in the OpenShift Console.
+# Replaces the deprecated Jaeger UI with a native Console plugin.
+#
+# APPLY:
+#   oc apply -f uiplugin-distributed-tracing.yaml
+#
+# VERIFY:
+#   oc get uiplugin distributed-tracing -o jsonpath='{.status}'
+#   # In OpenShift Console: Observe → Traces
+---
+apiVersion: observability.openshift.io/v1alpha1
+kind: UIPlugin
+metadata:
+  name: distributed-tracing
+spec:
+  type: DistributedTracing

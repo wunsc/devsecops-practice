@@ -1,0 +1,88 @@
+# infra/phase5/acs-central.yaml
+# ACS Central Custom Resource — deploys the Central server and Scanner
+# Central is the management plane: UI, API, policy engine, vulnerability DB
+# Scanner handles image vulnerability scanning
+# Apply AFTER the operator is installed and CSV is in Succeeded phase
+---
+apiVersion: platform.stackrox.io/v1alpha1
+kind: Central
+metadata:
+  name: stackrox-central-services
+  namespace: stackrox
+  labels:
+    team: devsecops
+spec:
+  central:
+    # Expose Central UI via OpenShift Route
+    exposure:
+      route:
+        enabled: true
+    # Persistent storage for Central's database
+    persistence:
+      persistentVolumeClaim:
+        claimName: stackrox-db
+        storageClassName: gp3-csi
+    # Resource limits for Central
+    resources:
+      requests:
+        cpu: 500m
+        memory: 2Gi
+      limits:
+        cpu: "2"
+        memory: 4Gi
+    # Central database (embedded PostgreSQL)
+    db:
+      persistence:
+        persistentVolumeClaim:
+          claimName: central-db
+          storageClassName: gp3-csi
+      resources:
+        requests:
+          cpu: 250m
+          memory: 1Gi
+        limits:
+          cpu: "1"
+          memory: 2Gi
+  scanner:
+    # Scanner analyzes container images for vulnerabilities
+    analyzer:
+      scaling:
+        autoScaling: Enabled
+        maxReplicas: 3
+        minReplicas: 1
+        replicas: 1
+      resources:
+        requests:
+          cpu: 250m
+          memory: 512Mi
+        limits:
+          cpu: "1"
+          memory: 2Gi
+    # Scanner DB stores vulnerability data
+    db:
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 1Gi
+  # ScannerV4 — next-gen scanner (available in ACS 4.x)
+  scannerV4:
+    indexer:
+      scaling:
+        autoScaling: Enabled
+        maxReplicas: 3
+        minReplicas: 1
+        replicas: 1
+    matcher:
+      scaling:
+        autoScaling: Enabled
+        maxReplicas: 3
+        minReplicas: 1
+        replicas: 1
+    db:
+      persistence:
+        persistentVolumeClaim:
+          claimName: scanner-v4-db
+          storageClassName: gp3-csi

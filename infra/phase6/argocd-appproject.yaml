@@ -1,0 +1,61 @@
+# infra/phase6/argocd-appproject.yaml
+# ArgoCD AppProject: devsecops
+# Restricts which repositories, clusters, and namespaces ArgoCD Applications
+# within this project can use — principle of least privilege
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: devsecops
+  namespace: openshift-gitops
+  labels:
+    team: devsecops
+spec:
+  description: "DevSecOps project — SampleAPI application across DEV/SIT/UAT/PROD"
+
+  # Source repositories — only allow our GitLab app-gitops repo
+  sourceRepos:
+    - "https://gitlab-devsecops-gitlab.apps.cluster-pmqwq.pmqwq.sandbox270.opentlc.com/devsecops/app-gitops.git"
+
+  # Destination clusters and namespaces — restrict to app namespaces only
+  destinations:
+    - server: "https://kubernetes.default.svc"
+      namespace: sampleapi-dev
+    - server: "https://kubernetes.default.svc"
+      namespace: sampleapi-sit
+    - server: "https://kubernetes.default.svc"
+      namespace: sampleapi-uat
+    - server: "https://kubernetes.default.svc"
+      namespace: sampleapi-prod
+
+  # Allowed resource kinds (whitelist approach)
+  clusterResourceWhitelist: []  # No cluster-scoped resources
+  namespaceResourceWhitelist:
+    - group: ""
+      kind: ConfigMap
+    - group: ""
+      kind: Secret
+    - group: ""
+      kind: Service
+    - group: ""
+      kind: ServiceAccount
+    - group: ""
+      kind: PersistentVolumeClaim
+    - group: apps
+      kind: Deployment
+    - group: apps
+      kind: ReplicaSet
+    - group: apps
+      kind: StatefulSet
+    - group: route.openshift.io
+      kind: Route
+    - group: networking.k8s.io
+      kind: NetworkPolicy
+    - group: autoscaling
+      kind: HorizontalPodAutoscaler
+    - group: policy
+      kind: PodDisruptionBudget
+
+  # Orphaned resources warning
+  orphanedResources:
+    warn: true

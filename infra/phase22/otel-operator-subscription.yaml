@@ -1,0 +1,40 @@
+# infra/phase22/otel-operator-subscription.yaml
+# OLM Subscription for the Red Hat build of OpenTelemetry Operator.
+#
+# The OTel Operator manages OpenTelemetryCollector and Instrumentation CRs.
+# It deploys OTel Collectors that receive traces via OTLP (gRPC :4317)
+# and forward them to Tempo for storage.
+#
+# APPLY:
+#   oc apply -f otel-operator-subscription.yaml
+#
+# VERIFY:
+#   oc get csv -n openshift-opentelemetry-operator | grep opentelemetry
+#   # Expected: opentelemetry-operator.vX.Y.Z — Succeeded
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openshift-opentelemetry-operator
+  labels:
+    openshift.io/cluster-monitoring: "true"
+---
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: openshift-opentelemetry-operator
+  namespace: openshift-opentelemetry-operator
+spec:
+  upgradeStrategy: Default
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: opentelemetry-product
+  namespace: openshift-opentelemetry-operator
+spec:
+  channel: stable
+  installPlanApproval: Automatic
+  name: opentelemetry-product
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace

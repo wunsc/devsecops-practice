@@ -1,0 +1,35 @@
+# infra/phase19/obc-tempo.yaml
+# ObjectBucketClaim for Tempo trace storage (pre-provisioned for Phase 22)
+#
+# Creating this OBC now avoids waiting for ODF bucket provisioning in Phase 22
+# (OpenTelemetry & Distributed Tracing). Tempo stores trace spans in S3-compatible
+# storage, same pattern as LokiStack.
+#
+# PREREQUISITE:
+#   - ODF StorageCluster in Ready state
+#   - openshift-tempo namespace created (this file creates it)
+#
+# APPLY:
+#   oc apply -f obc-tempo.yaml
+#
+# VERIFY:
+#   oc get obc tempo-bucket -n openshift-tempo
+#   # Expected: STATUS=Bound
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openshift-tempo
+  labels:
+    openshift.io/cluster-monitoring: "true"
+  annotations:
+    openshift.io/description: "OpenShift Tempo — distributed trace storage (Phase 22)"
+---
+apiVersion: objectbucket.io/v1alpha1
+kind: ObjectBucketClaim
+metadata:
+  name: tempo-bucket
+  namespace: openshift-tempo
+spec:
+  generateBucketName: tempo-traces             # ODF appends random suffix
+  storageClassName: openshift-storage.noobaa.io

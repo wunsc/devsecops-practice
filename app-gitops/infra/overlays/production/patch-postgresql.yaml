@@ -1,0 +1,19 @@
+# app-gitops/overlays/production/patch-postgresql.yaml
+# PRODUCTION-specific: higher resources for PostgreSQL
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgresql
+spec:
+  template:
+    spec:
+      containers:
+        - name: postgresql
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "1"
+              memory: 2Gi

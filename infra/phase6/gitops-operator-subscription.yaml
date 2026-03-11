@@ -1,0 +1,18 @@
+# infra/phase6/gitops-operator-subscription.yaml
+# OLM Subscription for OpenShift GitOps (ArgoCD) Operator
+# Installs into openshift-gitops-operator namespace
+# Creates a default ArgoCD instance in openshift-gitops namespace
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: openshift-gitops-operator
+  namespace: openshift-operators
+  labels:
+    team: devsecops
+spec:
+  channel: latest
+  installPlanApproval: Automatic
+  name: openshift-gitops-operator
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace

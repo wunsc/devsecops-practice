@@ -1,0 +1,94 @@
+# infra/phase2/gitlab-configmap.yaml
+# GitLab CE configuration via gitlab.rb
+# CRITICAL FIXES APPLIED:
+#   1. Puma port set to 8181 to avoid conflict with Nginx on 8080
+#   2. Encryption keys (db_key_base, secret_key_base, otp_key_base) loaded from secrets
+#      — without these, pod restarts cause OpenSSL::Cipher::CipherError on all encrypted data
+#   3. Bundled services disabled (external PostgreSQL + Redis)
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gitlab-config
+  namespace: devsecops-gitlab
+  labels:
+    team: devsecops
+    component: gitlab-ce
+data:
+  gitlab.rb: |
+    ## GitLab CE Configuration for OpenShift
+    ## All bundled services disabled — using external PostgreSQL + Redis
+
+    # --- External URL ---
+    # Must match the OpenShift Route; used for clone URLs and links in emails
+    external_url 'https://gitlab-devsecops-gitlab.apps.cluster-pmqwq.pmqwq.sandbox270.opentlc.com'
+
+    # --- Puma (Application Server) ---
+    # CRITICAL: Set Puma to port 8181 to avoid conflict with Nginx on 8080
+    # Both Puma and Nginx default to 8080 in non-root containers, causing bind failures
+    puma['port'] = 8181
+    # Bind Puma to all interfaces so Kubernetes probes can reach it via pod IP
+    puma['listen'] = '0.0.0.0'
+
+    # --- Nginx ---
+    # Listen on 8080 (unprivileged port for OpenShift)
+    nginx['listen_port'] = 8080
+    nginx['listen_https'] = false
+    # TLS is terminated at the OpenShift Route (edge termination)
+
+    # --- PostgreSQL (External) ---
+    # Disable bundled PostgreSQL — using separate StatefulSet
+    postgresql['enable'] = false
+    gitlab_rails['db_adapter'] = 'postgresql'
+    gitlab_rails['db_encoding'] = 'unicode'
+    gitlab_rails['db_host'] = 'gitlab-postgresql.devsecops-gitlab.svc.cluster.local'
+    gitlab_rails['db_port'] = 5432
+    gitlab_rails['db_database'] = ENV['GITLAB_DB_NAME']
+    gitlab_rails['db_username'] = ENV['GITLAB_DB_USER']
+    gitlab_rails['db_password'] = ENV['GITLAB_DB_PASSWORD']
+
+    # --- Redis (External) ---
+    # Disable bundled Redis — using separate StatefulSet
+    redis['enable'] = false
+    gitlab_rails['redis_host'] = 'gitlab-redis.devsecops-gitlab.svc.cluster.local'
+    gitlab_rails['redis_port'] = 6379
+    gitlab_rails['redis_password'] = ENV['REDIS_PASSWORD']
+
+    # --- Encryption Keys (CRITICAL) ---
+    # These MUST be persistent across pod restarts
+    # Without them, every restart generates new keys, making all encrypted DB data unreadable
+    gitlab_rails['db_key_base'] = ENV['DB_KEY_BASE']
+    gitlab_rails['secret_key_base'] = ENV['SECRET_KEY_BASE']
+    gitlab_rails['otp_key_base'] = ENV['OTP_KEY_BASE']
+
+    # --- GitLab Shell ---
+    gitlab_rails['gitlab_shell_ssh_port'] = 2222
+
+    # --- Monitoring ---
+    # Disable built-in Prometheus/Grafana (using OpenShift monitoring)
+    prometheus_monitoring['enable'] = false
+    alertmanager['enable'] = false
+    grafana['enable'] = false
+    prometheus['enable'] = false
+    node_exporter['enable'] = false
+    redis_exporter['enable'] = false
+    postgres_exporter['enable'] = false
+
+    # --- Sidekiq ---
+    sidekiq['concurrency'] = 10
+
+    # --- Container Registry ---
+    # Disable built-in registry (using OCP internal registry)
+    registry['enable'] = false
+    gitlab_rails['registry_enabled'] = false
+
+    # --- Pages ---
+    pages_external_url 'http://pages.example.com'
+    gitlab_pages['enable'] = false
+
+    # --- Mattermost ---
+    mattermost['enable'] = false
+
+    # --- Logging ---
+    logging['logrotate_frequency'] = "daily"
+    logging['logrotate_rotate'] = 7

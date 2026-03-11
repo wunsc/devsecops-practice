@@ -1,0 +1,53 @@
+# infra/phase7/agent-buildconfig.yaml
+# OCP BuildConfig to build the custom Jenkins agent image
+# Uses the Dockerfile.agent from this directory
+# The resulting image is stored in the internal registry
+---
+# ImageStream to hold the built agent image
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: jenkins-agent-devsecops
+  namespace: devsecops-tools
+  labels:
+    team: devsecops
+    component: jenkins-agent
+spec:
+  lookupPolicy:
+    local: true
+---
+# BuildConfig — Docker strategy using Dockerfile.agent
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: jenkins-agent-devsecops
+  namespace: devsecops-tools
+  labels:
+    team: devsecops
+    component: jenkins-agent
+spec:
+  # Build resources — agent image build needs significant memory for .NET SDK install
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+  source:
+    type: Binary
+    binary: {}
+  strategy:
+    type: Docker
+    dockerStrategy:
+      # Use Dockerfile.agent (not the default "Dockerfile" name)
+      dockerfilePath: Dockerfile.agent
+      noCache: false
+  output:
+    to:
+      kind: ImageStreamTag
+      name: "jenkins-agent-devsecops:latest"
+  # Trigger a new build when the Dockerfile changes
+  triggers: []
+  # Manual trigger only — rebuild when agent tools need updating
+  runPolicy: Serial

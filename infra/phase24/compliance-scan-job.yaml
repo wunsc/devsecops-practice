@@ -1,0 +1,73 @@
+# infra/phase24/compliance-scan-job.yaml
+# CronJob: Weekly ACS compliance scan across all namespaces.
+# Runs roxctl compliance scan and stores results in ACS Central.
+#
+# SCHEDULE: Every Sunday at 02:00 UTC
+#
+# PREREQUISITE:
+#   - ACS Central running in stackrox namespace
+#   - acs-token secret with API token in devsecops-tools namespace
+#
+# APPLY:
+#   oc apply -f compliance-scan-job.yaml -n devsecops-tools
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: acs-compliance-scan
+  namespace: devsecops-tools
+  labels:
+    app: acs-compliance
+    team: devsecops
+spec:
+  schedule: "0 2 * * 0"                          # Every Sunday 02:00 UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 4
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 1800                 # 30 minutes max
+      template:
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: jenkins-sa
+          containers:
+            - name: compliance-scan
+              image: registry.redhat.io/advanced-cluster-security/rhacs-roxctl-rhel8:4.7
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  echo "=== ACS Compliance Scan — $(date) ==="
+
+                  ACS_ENDPOINT="central.stackrox.svc:443"
+
+                  # Trigger compliance scan
+                  echo "Triggering compliance scan..."
+                  roxctl -e "$ACS_ENDPOINT" --insecure-skip-tls-verify \
+                    central compliance trigger
+
+                  echo "Waiting 60s for scan to complete..."
+                  sleep 60
+
+                  # Get compliance results summary
+                  echo "=== Compliance Results ==="
+                  roxctl -e "$ACS_ENDPOINT" --insecure-skip-tls-verify \
+                    central compliance results list 2>&1 || echo "Results listing not available in this roxctl version"
+
+                  echo "=== Scan completed at $(date) ==="
+              env:
+                - name: ROX_API_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: acs-token
+                      key: token
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  cpu: 200m
+                  memory: 256Mi

@@ -1,0 +1,91 @@
+# infra/phase22/tempostack.yaml
+# TempoStack CR — distributed trace storage backend.
+#
+# TempoStack stores trace spans in S3-compatible storage (ODF NooBaa).
+# The ObjectBucketClaim `tempo-bucket` was pre-provisioned in Phase 19
+# (infra/phase19/obc-tempo.yaml). ODF auto-created:
+#   - ConfigMap `tempo-bucket` with BUCKET_NAME, BUCKET_HOST, BUCKET_PORT
+#   - Secret `tempo-bucket` with AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+#
+# IMPORTANT: The OBC-generated secret uses AWS_ key names, but TempoStack
+# expects `access_key_id`, `access_key_secret`, `bucket`, `endpoint`.
+# You must create a reformatted secret `tempo-s3` before applying this CR.
+# See README-phase22.md for the exact commands.
+#
+# PREREQUISITE:
+#   - Tempo Operator installed and ready
+#   - OBC `tempo-bucket` in Bound state (from Phase 19)
+#   - Secret `tempo-s3` created with Tempo-expected field names
+#
+# APPLY:
+#   oc apply -f tempostack.yaml -n openshift-tempo
+#
+# VERIFY:
+#   oc get tempostack -n openshift-tempo
+#   # Expected: STATUS=Ready
+#   oc get pods -n openshift-tempo -l app.kubernetes.io/managed-by=tempo-operator
+#   # Expected: compactor, distributor, ingester, querier, query-frontend pods Running
+---
+apiVersion: tempo.grafana.com/v1alpha1
+kind: TempoStack
+metadata:
+  name: tempo
+  namespace: openshift-tempo
+spec:
+  # 1x.demo is suitable for lab/dev (minimal resources).
+  # Use 1x.small or 1x.medium for production workloads.
+  managementState: Managed
+
+  storage:
+    secret:
+      name: tempo-s3                              # Reformatted from OBC `tempo-bucket`
+      type: s3
+    tls:
+      enabled: true
+      caName: tempo-ca-bundle                     # service-CA injected ConfigMap for NooBaa TLS
+
+  storageSize: 10Gi                               # WAL/index PVC size
+
+  resources:
+    total:
+      limits:
+        cpu: "2"
+        memory: 2Gi
+
+  template:
+    distributor:
+      replicas: 1
+    ingester:
+      replicas: 1
+    compactor:
+      replicas: 1
+    querier:
+      replicas: 1
+    queryFrontend:
+      replicas: 1
+      jaegerQuery:
+        enabled: true                             # Enable Jaeger query (UI served via gateway)
+        ingress:
+          type: ""                                # No direct ingress — use gateway route instead
+    gateway:
+      enabled: true                               # Required for openshift tenancy mode
+
+  # Retention: keep traces for 48 hours (lab), extend for production
+  retention:
+    global:
+      traces: 48h
+
+  # Multi-tenancy: one tenant per environment.
+  # OTel Collector routes traces to the correct tenant via X-Scope-OrgID header.
+  # OpenShift Console tracing UI requires multi-tenancy to be enabled.
+  tenants:
+    mode: openshift
+    authentication:
+      - tenantName: dev
+        tenantId: "1610b0c3-c509-4592-a256-a1871353db01"
+      - tenantName: sit
+        tenantId: "1610b0c3-c509-4592-a256-a1871353db02"
+      - tenantName: uat
+        tenantId: "1610b0c3-c509-4592-a256-a1871353db03"
+      - tenantName: prod
+        tenantId: "1610b0c3-c509-4592-a256-a1871353db04"
