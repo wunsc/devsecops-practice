@@ -1,9 +1,9 @@
 # DevSecOps on OpenShift — Tutorial Curriculum
 
 > **Format:** Self-paced, hands-on tutorial with real cluster exercises
-> **Duration:** ~22 hours across 17 modules / 5 tracks
-> **Platform:** Red Hat OpenShift 4.x with Jenkins, ArgoCD, ACS, SonarQube, OWASP ZAP
-> **Application:** .NET 8 microservices (SampleApi, NotificationApi) with PostgreSQL and Redis, deployed across 4 environments
+> **Duration:** ~30 hours across 23 modules / 6 tracks
+> **Platform:** Red Hat OpenShift 4.x with Jenkins, ArgoCD, ACS, SonarQube, OWASP ZAP, RHTAS, RHTPA
+> **Application:** .NET 8 + Java 21 microservices (5 services) with PostgreSQL and Redis, deployed across 4 environments
 
 ---
 
@@ -26,7 +26,7 @@ Tracks can be taken independently after the Foundation Track.
 ```
 +---------------------------------------------------------------------+
 |                     DevSecOps Tutorial Curriculum                    |
-|                     17 Modules / 5 Tracks / ~22h                    |
+|                    23 Modules / 6 Tracks / ~30h                     |
 +---------------------------------------------------------------------+
 |                                                                     |
 |  FOUNDATION TRACK (Modules 1-4) --- ~6h                             |
@@ -48,6 +48,10 @@ Tracks can be taken independently after the Foundation Track.
 |  ADVANCED TRACK (Modules 14-15) --- ~3h                             |
 |  Performance gates and production hardening                         |
 |  M14 --> M15                                                        |
+|                                                                     |
+|  SUPPLY CHAIN & MULTI-LANGUAGE TRACK (Modules 16-20) --- ~8h        |
+|  Multi-language pipelines and supply chain security                 |
+|  M16 --> M16B --> M17 --> M18 --> M19 --> M20                       |
 |                                                                     |
 +---------------------------------------------------------------------+
 ```
@@ -116,15 +120,32 @@ Performance gates and production-grade hardening.
 
 ---
 
+## Supply Chain & Multi-Language Track (~8 hours)
+
+Extend the platform with Java microservices, SBOM generation, image signing, and cascading promotion across 5 services and 4 environments.
+
+| Module | Title | Duration | Quick Win |
+|--------|-------|----------|-----------|
+| [Module 16](module-16-java-microservices.md) | Java Microservices on OpenShift | ~90 min | Java Spring Boot service running alongside .NET services with shared pipeline logic |
+| [Module 16B](module-16b-distributed-tracing.md) | Distributed Tracing Deep Dive | ~75 min | Trace a request across 5 services in the Grafana waterfall view |
+| [Module 17](module-17-sbom-trustify.md) | SBOM Generation & Vulnerability Analysis | ~75 min | See every dependency of your app cataloged in Trustify with CVE matching |
+| [Module 18](module-18-image-signing-rhtas.md) | Image Signing & Verification with RHTAS | ~75 min | Cryptographically verify your image came from your pipeline — not tampered |
+| [Module 19](module-19-promotion-pipeline.md) | The T4 Promotion Pipeline | ~75 min | Watch a release cascade from SIT to PROD automatically via MR approvals |
+| [Module 20](module-20-e2e-five-services.md) | Full 5-Service E2E Walkthrough | ~90 min | All 5 services promoted to production with signed images and SBOMs |
+
+---
+
 ## Delivery Formats
 
 | Format | Duration | Best For |
 |--------|----------|----------|
-| Full workshop (instructor-led) | 3 days (8h/day) | Team enablement |
-| Self-paced course | 3-4 weeks (1h/day) | Individual learning |
+| Full workshop (instructor-led) | 4 days (8h/day) | Team enablement |
+| Self-paced course | 4-5 weeks (1h/day) | Individual learning |
 | Quick-start lab | 4h (M1+M3+M8+M10) | Fast hands-on intro |
 | Security deep-dive | 1 day (M5+M6+M7+M14) | Security team focus |
-| Observability bootcamp | 1 day (M11+M12+M13) | SRE/ops team focus |
+| Supply chain security | 1 day (M17+M18+M19) | Supply chain & compliance |
+| Observability bootcamp | 1 day (M11+M12+M13+M16B) | SRE/ops team focus |
+| Multi-language + E2E | 1 day (M16+M19+M20) | Platform architects |
 
 ---
 
@@ -187,6 +208,10 @@ Developer --> GitLab (MR) --> Jenkins (T1: scan) --> GitLab (status)
 | LokiStack | Log aggregation | M11 |
 | Prometheus | Metrics and alerting | M12 |
 | Grafana | Dashboards | M13 |
-| OpenTelemetry | Distributed tracing auto-instrumentation | M13 |
-| Tempo | Trace storage and query | M13 |
+| OpenTelemetry | Distributed tracing auto-instrumentation | M13, M16B |
+| Tempo | Trace storage and query | M13, M16B |
 | k6 | Performance testing | M14 |
+| Spring Boot / Maven | Java microservice framework | M16 |
+| CycloneDX | SBOM generation (.NET + Java) | M17 |
+| Trustify (RHTPA) | SBOM management + vulnerability analysis | M17 |
+| RHTAS (Cosign/Sigstore) | Image signing + verification | M18 |

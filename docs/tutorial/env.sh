@@ -65,6 +65,36 @@ export GITLAB_PROJECT_SHARED_LIB=3
 export GITLAB_PROJECT_APP_GITOPS=4
 export GITLAB_PROJECT_NOTIFICATION_SOURCE=5
 
+# ── JAVA APPLICATION ──
+export JAVA_APP_NAME="javaapp"
+export NS_JAVA_DEV="${JAVA_APP_NAME}-dev"
+export NS_JAVA_SIT="${JAVA_APP_NAME}-sit"
+export NS_JAVA_UAT="${JAVA_APP_NAME}-uat"
+export NS_JAVA_PROD="${JAVA_APP_NAME}-prod"
+
+# ── JAVA SERVICE URLS ──
+export ORDER_SVC_DEV_URL="https://order-service-${NS_JAVA_DEV}.${APPS_DOMAIN}"
+export INVENTORY_SVC_DEV_URL="https://inventory-service-${NS_JAVA_DEV}.${APPS_DOMAIN}"
+export PAYMENT_SVC_DEV_URL="https://payment-service-${NS_JAVA_DEV}.${APPS_DOMAIN}"
+
+# ── GITLAB PROJECT IDs (Java Services) ──
+export GITLAB_PROJECT_ORDER_SERVICE=10
+export GITLAB_PROJECT_INVENTORY_SERVICE=11
+export GITLAB_PROJECT_PAYMENT_SERVICE=12
+
+# ── SUPPLY CHAIN TOOLS ──
+export NS_RHTAS="trusted-artifact-signer"
+export NS_RHTPA="test-app"
+export TRUSTIFY_URL="https://server.${NS_RHTPA}.svc"
+export RHTAS_REKOR_URL="https://rekor-server-${NS_RHTAS}.${APPS_DOMAIN}"
+export RHTAS_FULCIO_URL="https://fulcio-server-${NS_RHTAS}.${APPS_DOMAIN}"
+export RHTAS_REKOR_SEARCH_URL="https://rekor-search-ui-${NS_RHTAS}.${APPS_DOMAIN}"
+
+# ── TRACING ──
+export NS_TEMPO="openshift-tempo"
+export NS_LOGGING="openshift-logging"
+export OTEL_COLLECTOR_ENDPOINT="http://otel-collector-collector.${NS_TEMPO}.svc:4317"
+
 # ── CLI TOOLS ──
 # Add ~/bin to PATH for helm, kustomize, yq, roxctl, argocd, cosign
 export PATH="$HOME/bin:$PATH"
@@ -81,3 +111,8 @@ echo "  ArgoCD:      $ARGOCD_URL"
 echo "  Grafana:     $GRAFANA_URL"
 echo "  App DEV:     $APP_DEV_URL"
 echo "  App PROD:    $APP_PROD_URL"
+echo "  Java DEV:    $NS_JAVA_DEV"
+echo "  Order Svc:   $ORDER_SVC_DEV_URL"
+echo "  Trustify:    $TRUSTIFY_URL"
+echo "  Rekor:       $RHTAS_REKOR_URL"
+echo "  Fulcio:      $RHTAS_FULCIO_URL"
