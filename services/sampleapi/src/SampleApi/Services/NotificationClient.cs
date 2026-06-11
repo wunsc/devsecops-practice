@@ -103,6 +103,75 @@ public class NotificationClient
             return null;
         }
     }
+    public virtual async Task<SubscriptionConfirmation?> RegisterSubscriptionAsync(
+        string city, string email, int thresholdTemp)
+    {
+        try
+        {
+            var payload = new { City = city, Email = email, ThresholdTemp = thresholdTemp };
+            var content = new StringContent(
+                JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+
+            var response = await _httpClient.PostAsync("/api/Notify/subscribe", content);
+            if (response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                return JsonSerializer.Deserialize<SubscriptionConfirmation>(body, JsonOptions);
+            }
+            _logger.LogWarning("RegisterSubscription returned {Status}", response.StatusCode);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to register subscription for {City}/{Email}", city, email);
+            return null;
+        }
+    }
+
+    public virtual async Task<AlertCheckResult?> CheckAlertAsync(
+        string subscriptionId, string city, int currentTemp)
+    {
+        try
+        {
+            var payload = new { SubscriptionId = subscriptionId, City = city, CurrentTemp = currentTemp };
+            var content = new StringContent(
+                JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+
+            var response = await _httpClient.PostAsync("/api/Notify/check", content);
+            if (response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                return JsonSerializer.Deserialize<AlertCheckResult>(body, JsonOptions);
+            }
+            _logger.LogWarning("CheckAlert returned {Status}", response.StatusCode);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to check alert for subscription {Id}", subscriptionId);
+            return null;
+        }
+    }
+
+    public virtual async Task<NotificationStatsResult?> GetStatsAsync(string city)
+    {
+        try
+        {
+            var response = await _httpClient.GetAsync($"/api/Notify/stats/{city}");
+            if (response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                return JsonSerializer.Deserialize<NotificationStatsResult>(body, JsonOptions);
+            }
+            _logger.LogWarning("GetStats returned {Status}", response.StatusCode);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to get stats for {City}", city);
+            return null;
+        }
+    }
 }
 
 /// <summary>
@@ -118,4 +187,30 @@ public class NotificationResponse
 
     /// <summary>Human-readable status message</summary>
     public string? Message { get; set; }
+}
+
+public class SubscriptionConfirmation
+{
+    public string? SubscriptionId { get; set; }
+    public string? City { get; set; }
+    public string? Email { get; set; }
+    public string? Status { get; set; }
+}
+
+public class AlertCheckResult
+{
+    public string? SubscriptionId { get; set; }
+    public string? City { get; set; }
+    public int ThresholdTemp { get; set; }
+    public int CurrentTemp { get; set; }
+    public bool AlertTriggered { get; set; }
+    public string? AlertMessage { get; set; }
+}
+
+public class NotificationStatsResult
+{
+    public string? City { get; set; }
+    public int TotalAlertsSent { get; set; }
+    public int TotalSubscriptions { get; set; }
+    public int AlertsTriggeredToday { get; set; }
 }

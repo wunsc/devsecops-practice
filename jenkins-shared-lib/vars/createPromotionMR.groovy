@@ -27,7 +27,7 @@ def call(Map config = [:]) {
     def credentialsId = config.credentialsId ?: 'gitlab-token'
     def apiTokenCredId = config.apiTokenCredId ?: 'gitlab-api-token'
     // app-gitops project ID (separate from app-source)
-    def gitopsProjectId = config.gitopsProjectId ?: '4'
+    def gitopsProjectId = config.gitopsProjectId ?: '7'
 
     // activeImageName is set by configureForService() — defaults to appName
     // Used for: branch naming, overlay path, kustomize image name
@@ -121,7 +121,7 @@ def call(Map config = [:]) {
 
             def mrResponse = sh(
                 script: """
-                    curl -sf -X POST "${gitlabUrl}/api/v4/projects/${gitopsProjectId}/merge_requests" \
+                    curl -sfk -X POST "${gitlabUrl}/api/v4/projects/${gitopsProjectId}/merge_requests" \
                         -H "PRIVATE-TOKEN: \${GITLAB_TOKEN}" \
                         -H "Content-Type: application/json" \
                         --data-binary @/tmp/promotion-mr.json 2>/dev/null || echo '{}'
@@ -151,7 +151,7 @@ def call(Map config = [:]) {
                 def pipelineDescription = "All quality gates passed — ready for promotion to ${envLabel}"
                 def statusResponse = sh(
                     script: """
-                        curl -sf -X POST \
+                        curl -sfk -X POST \
                             -H "PRIVATE-TOKEN: \${GITLAB_TOKEN}" \
                             "${gitlabUrl}/api/v4/projects/${gitopsProjectId}/statuses/${sourceBranchSha}" \
                             -d "state=success" \
@@ -279,8 +279,12 @@ private String buildPromotionDescription(String imageTag, String targetEnv, Map 
         def r = results.acsScan
         def critical = r.criticalCount ?: 0
         def high = r.highCount ?: 0
-        def icon = critical > 0 ? '❌' : (high > 0 ? '⚠️' : '✅')
-        sb.append("| ACS Image Scan (Strict) | ${icon} ${r.status} | Critical: **${critical}** / High: **${high}** |\n")
+        def icon = (r.status == 'FAILURE') ? '❌' :
+            critical > 0 ? '❌' : (high > 0 ? '⚠️' : '✅')
+        def detail = (r.status == 'FAILURE' && critical == 0 && high == 0) ?
+            "Error: ${r.error ?: 'scan failed — check ACS connectivity'}" :
+            "Critical: **${critical}** / High: **${high}**"
+        sb.append("| ACS Image Scan (Strict) | ${icon} ${r.status} | ${detail} |\n")
     }
 
     // OWASP ZAP DAST
@@ -301,8 +305,30 @@ private String buildPromotionDescription(String imageTag, String targetEnv, Map 
     // Image Signing
     if (results.signImage) {
         def r = results.signImage
-        def icon = r.status == 'SUCCESS' ? '✅' : (r.status == 'SKIPPED' ? '⏭️' : '❌')
-        sb.append("| Image Signing (Cosign) | ${icon} ${r.status} | ${r.status == 'SKIPPED' ? 'No signing key configured' : ''} |\n")
+        def icon = r.status == 'SUCCESS' ? '✅' : '❌'
+        def detail = r.status == 'SUCCESS' ?
+            "Keyless (RHTAS) | Attestation: ${r.attestStatus ?: 'N/A'}" :
+            "Error: ${r.error ?: 'failed'}"
+        sb.append("| Image Signing (Cosign) | ${icon} ${r.status} | ${detail} |\n")
+    }
+
+    // Image Verification
+    if (results.verifyImage) {
+        def r = results.verifyImage
+        def icon = r.status == 'SUCCESS' ? '✅' : '❌'
+        def sigValid = r.signatureValid ? 'Valid' : 'Invalid'
+        def attValid = r.attestationValid ? 'Valid' : 'Invalid'
+        sb.append("| Image Verification | ${icon} ${r.status} | Signature: **${sigValid}** / Attestation: **${attValid}** |\n")
+    }
+
+    // SBOM
+    if (results.sbom) {
+        def r = results.sbom
+        def icon = r.status == 'SUCCESS' ? '✅' : (r.gateResult == 'FAILED' ? '❌' : '⚠️')
+        def upload = r.uploadStatus ?: 'N/A'
+        def vulns = (r.totalVulns ?: 0) > 0 ?
+            " | C:${r.critical ?: 0}/H:${r.high ?: 0}/M:${r.medium ?: 0}/L:${r.low ?: 0}" : ''
+        sb.append("| SBOM (CycloneDX) | ${icon} ${r.status} | **${r.components ?: 0}** components, Upload: ${upload}${vulns} |\n")
     }
 
     // T4 cascading: show previous environment deployment results

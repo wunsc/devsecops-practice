@@ -218,14 +218,14 @@ def call(Map config = [:]) {
                         }
 
                         results.syncResults.each { envMeta ->
-                            // Namespace: {appName}-{env} (PROD → prod, not production)
-                            def ns = "${pipelineConfig.appName}-${envMeta.env.toLowerCase()}"
-                            if (envMeta.env == 'PROD') {
-                                ns = "${pipelineConfig.appName}-prod"
-                            }
-
-                            // Use per-service labels for pod/route/deploy lookups
                             def serviceName = envMeta.service ?: pipelineConfig.appName
+                            // Java services live in javaapp-{env}, .NET services in sampleapi-{env}
+                            def javaServices = ['order-service', 'inventory-service', 'payment-service']
+                            def nsPrefix = javaServices.contains(serviceName) ? 'javaapp' : 'sampleapi'
+                            def ns = "${nsPrefix}-${envMeta.env.toLowerCase()}"
+                            if (envMeta.env == 'PROD') {
+                                ns = "${nsPrefix}-prod"
+                            }
 
                             echo "=== Verifying ${envMeta.env} / ${serviceName} (namespace: ${ns}) ==="
 
@@ -244,11 +244,19 @@ def call(Map config = [:]) {
 
                             def healthStatus = 'UNKNOWN'
                             if (route && route != '' && !route.contains('Error')) {
+                                // .NET uses /healthz → "healthy"; Java uses /actuator/health → "UP"
+                                def javaServices = ['order-service', 'inventory-service', 'payment-service']
+                                def healthPath = javaServices.contains(serviceName) ? '/actuator/health' : '/healthz'
                                 def healthResponse = sh(
-                                    script: "curl -sk --max-time 10 https://${route}/healthz 2>/dev/null || echo '{}'",
+                                    script: "curl -sk --max-time 10 https://${route}${healthPath} 2>/dev/null || echo '{}'",
                                     returnStdout: true
                                 ).trim()
-                                healthStatus = healthResponse.contains('"healthy"') ? 'HEALTHY' : 'UNHEALTHY'
+                                healthStatus = (healthResponse.contains('"healthy"') || healthResponse.contains('"UP"')) ? 'HEALTHY' : 'UNHEALTHY'
+                            }
+                            // Fallback: if no route, check pod readiness
+                            if (healthStatus == 'UNKNOWN' && readyPods.toInteger() > 0) {
+                                echo "  No route found — using pod readiness as health indicator"
+                                healthStatus = 'HEALTHY'
                             }
 
                             // Get deployed image tag for the specific service
@@ -398,8 +406,8 @@ def buildPromotionReport(Map results, def pipelineConfig) {
 def reportPromotionToGitLab(Map results, def pipelineConfig) {
     try {
         def gitlabUrl = pipelineConfig.gitlabUrl
-        // app-gitops is project ID 4
-        def gitopsProjectId = '4'
+        // app-gitops is project ID 7
+        def gitopsProjectId = '7'
         def commitSha = results.mergeCommit ?: ''
 
         if (!commitSha || commitSha == 'unknown') {
@@ -479,7 +487,7 @@ def setGitLabPipelineStatus(String state, String commitSha, def pipelineConfig) 
         }
 
         def gitlabUrl = pipelineConfig.gitlabUrl
-        def gitopsProjectId = '4'  // app-gitops project
+        def gitopsProjectId = '7'  // app-gitops project
         def buildUrl = env.BUILD_URL ?: ''
         def buildNum = env.BUILD_NUMBER ?: '?'
 

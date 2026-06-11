@@ -8,6 +8,7 @@
 // Failure priority: Always return forecasts > try to cache > try to persist > try to notify.
 
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using SampleApi.Data;
 using SampleApi.Models;
@@ -138,6 +139,143 @@ public class WeatherForecastController : ControllerBase
         return forecasts;
     }
 
+    [HttpPost("subscribe")]
+    public async Task<IActionResult> Subscribe([FromBody] AlertSubscriptionRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.City) || string.IsNullOrWhiteSpace(request.Email))
+            return BadRequest(new { error = "City and Email are required." });
+
+        _logger.LogInformation("Creating alert subscription for {City}/{Email} threshold={Threshold}",
+            request.City, request.Email, request.ThresholdTemp);
+
+        AlertSubscription? subscription = null;
+        try
+        {
+            subscription = new AlertSubscription
+            {
+                City = request.City,
+                Email = request.Email,
+                ThresholdTemp = request.ThresholdTemp,
+                CreatedAt = DateTime.UtcNow
+            };
+            _dbContext.AlertSubscriptions.Add(subscription);
+            await _dbContext.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to persist subscription to PostgreSQL");
+        }
+
+        var registration = await _notificationClient.RegisterSubscriptionAsync(
+            request.City, request.Email, request.ThresholdTemp);
+
+        return Ok(new
+        {
+            subscriptionId = subscription?.Id,
+            city = request.City,
+            email = request.Email,
+            thresholdTemp = request.ThresholdTemp,
+            notificationRegistration = registration
+        });
+    }
+
+    [HttpGet("alerts/{city}")]
+    public async Task<IActionResult> GetAlerts(string city)
+    {
+        _logger.LogInformation("Checking weather alerts for {City}", city);
+
+        var cacheKey = $"forecasts:{city}";
+        var cached = await _cacheService.GetAsync<WeatherForecast[]>(cacheKey);
+        int currentTemp;
+        if (cached is not null && cached.Length > 0)
+        {
+            currentTemp = cached[0].TemperatureC;
+        }
+        else
+        {
+            currentTemp = Random.Shared.Next(_options.MinTemperature, _options.MaxTemperature);
+        }
+
+        var subscriptions = new List<AlertSubscription>();
+        try
+        {
+            subscriptions = await _dbContext.AlertSubscriptions
+                .Where(s => s.City == city)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to query subscriptions from PostgreSQL");
+        }
+
+        var alerts = new List<object>();
+        foreach (var sub in subscriptions)
+        {
+            var result = await _notificationClient.CheckAlertAsync(
+                sub.Id.ToString(), city, currentTemp);
+            alerts.Add(new
+            {
+                subscriptionId = sub.Id,
+                email = sub.Email,
+                thresholdTemp = sub.ThresholdTemp,
+                alertTriggered = result?.AlertTriggered ?? false,
+                alertMessage = result?.AlertMessage
+            });
+        }
+
+        return Ok(new
+        {
+            city,
+            currentTemp,
+            subscriptionCount = subscriptions.Count,
+            alerts
+        });
+    }
+
+    [HttpGet("history/{city}")]
+    public async Task<IActionResult> GetHistory(string city)
+    {
+        _logger.LogInformation("Fetching weather history for {City}", city);
+
+        var cacheKey = $"history:{city}";
+        var cached = await _cacheService.GetAsync<WeatherRecord[]>(cacheKey);
+        List<WeatherRecord> records;
+
+        if (cached is not null)
+        {
+            records = cached.ToList();
+        }
+        else
+        {
+            records = new List<WeatherRecord>();
+            try
+            {
+                records = await _dbContext.WeatherRecords
+                    .Where(r => r.City == city)
+                    .OrderByDescending(r => r.Date)
+                    .Take(30)
+                    .ToListAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to query history from PostgreSQL");
+            }
+
+            if (records.Count > 0)
+                await _cacheService.SetAsync(cacheKey, records.ToArray(), TimeSpan.FromMinutes(2));
+        }
+
+        var stats = await _notificationClient.GetStatsAsync(city);
+
+        return Ok(new
+        {
+            city,
+            recordCount = records.Count,
+            records,
+            notificationStats = stats
+        });
+    }
+
     /// <summary>
     /// GET /api/WeatherForecast/config
     /// Returns the current configuration (useful for debugging per-env config)
@@ -178,4 +316,11 @@ public class WeatherForecast
     public string? Summary { get; set; }
     public string Location { get; set; } = "Default";
     public string TemperatureUnit { get; set; } = "Celsius";
+}
+
+public class AlertSubscriptionRequest
+{
+    public string City { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public int ThresholdTemp { get; set; }
 }

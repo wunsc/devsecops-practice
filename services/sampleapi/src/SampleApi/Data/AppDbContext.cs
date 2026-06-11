@@ -21,6 +21,9 @@ public class AppDbContext : DbContext
     /// <summary>Weather forecast records persisted to PostgreSQL</summary>
     public DbSet<WeatherRecord> WeatherRecords { get; set; } = null!;
 
+    /// <summary>Alert subscriptions for weather threshold notifications</summary>
+    public DbSet<AlertSubscription> AlertSubscriptions { get; set; } = null!;
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -35,6 +38,15 @@ public class AppDbContext : DbContext
                   .HasDatabaseName("ix_weather_records_city_date");
 
             // Default value for created_at — PostgreSQL now() function
+            entity.Property(e => e.CreatedAt)
+                  .HasDefaultValueSql("now()");
+        });
+
+        modelBuilder.Entity<AlertSubscription>(entity =>
+        {
+            entity.ToTable("alert_subscriptions");
+            entity.HasIndex(e => e.City)
+                  .HasDatabaseName("ix_alert_subscriptions_city");
             entity.Property(e => e.CreatedAt)
                   .HasDefaultValueSql("now()");
         });

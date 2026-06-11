@@ -94,9 +94,19 @@ spec:
                         // Update env after configureForService (environment block evaluates too early)
                         env.GITLAB_PROJECT_ID = pipelineConfig.gitlabProjectId
 
-                        // KNOWN FIX: Get tag name from GitLab webhook env vars or GIT_BRANCH
-                        // GitLab plugin sets gitlabBranch for push/tag events (e.g., "v1.0.0" or "refs/tags/v1.0.0")
+                        // Get tag name from GitLab webhook env vars
                         def rawTag = env.gitlabBranch ?: env.GIT_BRANCH ?: env.TAG_NAME ?: ''
+                        if (!rawTag || rawTag == 'null' || rawTag == 'main' || rawTag == 'origin/main') {
+                            // Fallback: query GitLab API for latest tag (no git auth needed)
+                            withCredentials([string(credentialsId: pipelineConfig.gitApiTokenId, variable: 'GL_TOKEN')]) {
+                                rawTag = sh(script: """
+                                    curl -sk -H "PRIVATE-TOKEN: \${GL_TOKEN}" \
+                                        "${pipelineConfig.gitlabUrl}/api/v4/projects/${pipelineConfig.gitlabProjectId}/repository/tags?order_by=version&sort=desc&per_page=1" \
+                                        | python3 -c "import json,sys; print(json.load(sys.stdin)[0]['name'])"
+                                """, returnStdout: true).trim()
+                            }
+                            echo "  Resolved latest tag from GitLab API: ${rawTag}"
+                        }
                         def tagName = com.devsecops.ImageTagger.forTag(rawTag)
                         pipelineConfig.imageTag = tagName
                         echo "=== T3: Tag/Release Pipeline ==="
@@ -150,7 +160,7 @@ spec:
             stage('Build') {
                 steps {
                     script {
-                        results.build = buildDotnet(project: '.')
+                        if (pipelineConfig.activeLanguage == 'java') { results.build = buildJava(project: '.') } else { results.build = buildDotnet(project: '.') }
                         if (results.build.status == 'FAILURE') {
                             error "Build failed: ${results.build.error}"
                         }
@@ -161,7 +171,7 @@ spec:
             stage('Unit Tests') {
                 steps {
                     script {
-                        results.unitTests = runUnitTests(project: '.')
+                        if (pipelineConfig.activeLanguage == 'java') { results.unitTests = runJavaTests(project: '.') } else { results.unitTests = runUnitTests(project: '.') }
                     }
                 }
             }
@@ -172,13 +182,22 @@ spec:
                         // T3: Tag scan with version tag so SonarQube identifies this
                         // as a release scan, separate from MR and main branch scans.
                         // projectVersion = tag name (e.g., "v1.1.0")
-                        results.sonarqube = scanSonarQube(
-                            projectKey: pipelineConfig.sonarProjectKey,
-                            sonarUrl: pipelineConfig.sonarUrl,
-                            project: '.',
-                            projectVersion: pipelineConfig.imageTag,
-                            analysisMode: 'tag'
-                        )
+                        if (pipelineConfig.activeLanguage == 'java') {
+                            results.sonarqube = scanSonarQubeJava(
+                                projectKey: pipelineConfig.sonarProjectKey,
+                                sonarUrl: pipelineConfig.sonarUrl,
+                                project: '.',
+                                projectVersion: pipelineConfig.imageTag
+                            )
+                        } else {
+                            results.sonarqube = scanSonarQube(
+                                projectKey: pipelineConfig.sonarProjectKey,
+                                sonarUrl: pipelineConfig.sonarUrl,
+                                project: '.',
+                                projectVersion: pipelineConfig.imageTag,
+                                analysisMode: 'tag'
+                            )
+                        }
                         if (results.sonarqube.status == 'FAILURE') {
                             unstable "SonarQube quality gate failed: ${results.sonarqube.gateStatus ?: results.sonarqube.error}"
                         }
@@ -199,11 +218,28 @@ spec:
                 }
             }
 
+            stage('Generate SBOM') {
+                steps {
+                    script {
+                        results.sbom = generateSBOM(
+                            project: '.',
+                            language: pipelineConfig.activeLanguage,
+                            serviceName: serviceName,
+                            imageTag: pipelineConfig.imageTag
+                        )
+                        if (results.sbom.status == 'FAILURE') {
+                            error "SBOM gate FAILED: ${results.sbom.gateResult} " +
+                                  "(Critical: ${results.sbom.critical ?: 0}, High: ${results.sbom.high ?: 0})"
+                        }
+                    }
+                }
+            }
+
             stage('Build Container Image') {
                 steps {
                     script {
                         results.imageBuild = buildContainerImage(
-                            dockerfile: 'build-config/Dockerfile',
+                            dockerfile: pipelineConfig.activeLanguage == 'java' ? 'build-config/Dockerfile.java' : 'build-config/Dockerfile',
                             imageRef: pipelineConfig.getActiveImageRef(),
                             buildArgs: pipelineConfig.activeBuildArgs
                         )
@@ -289,10 +325,27 @@ spec:
             stage('Sign Image') {
                 steps {
                     script {
-                        // KNOWN FIX: Gracefully skips if cosign-signing-key not configured
+                        def sbom = results.sbom?.sbomFile ?: ''
                         results.signImage = signImage(
+                            imageRef: pipelineConfig.getActiveImageRef(),
+                            sbomFile: sbom
+                        )
+                        if (results.signImage.status == 'FAILURE') {
+                            error "Image signing failed: ${results.signImage.error ?: 'unknown'}"
+                        }
+                    }
+                }
+            }
+
+            stage('Verify Image') {
+                steps {
+                    script {
+                        results.verifyImage = verifyImage(
                             imageRef: pipelineConfig.getActiveImageRef()
                         )
+                        if (results.verifyImage.status == 'FAILURE') {
+                            error "Image verification failed — signature or attestation invalid"
+                        }
                     }
                 }
             }

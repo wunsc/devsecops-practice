@@ -57,7 +57,7 @@ def call(Map config = [:]) {
             def buildUrl = env.BUILD_URL ?: ''
 
             sh """
-                curl -sf -X POST "${apiUrl}" \\
+                curl -sfk -X POST "${apiUrl}" \\
                     -H "PRIVATE-TOKEN: \${GITLAB_TOKEN}" \\
                     -d "state=${state}" \\
                     -d "description=${description}" \\

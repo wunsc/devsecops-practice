@@ -38,9 +38,13 @@ def call(Map config = [:]) {
             // NOTE: roxctl reads ROX_API_TOKEN from env (set by withCredentials above).
             // Do NOT use --token flag (doesn't exist) or || true (swallows errors).
             // returnStatus:true captures exit code without failing the step.
+            // Strip protocol and trailing port/slash — roxctl -e expects host:port
+            def acsEndpoint = acsUrl.replaceAll('^https?://', '').replaceAll('/+$', '')
+            if (!acsEndpoint.contains(':')) { acsEndpoint += ':443' }
+
             def checkExitCode = sh(
                 script: """
-                    roxctl -e "${acsUrl}:443" \\
+                    roxctl -e "${acsEndpoint}" \\
                         --insecure-skip-tls-verify \\
                         image check \\
                         --image "${imageRef}" \\
@@ -52,7 +56,7 @@ def call(Map config = [:]) {
             // Image scan — vulnerability scanning
             def scanExitCode = sh(
                 script: """
-                    roxctl -e "${acsUrl}:443" \\
+                    roxctl -e "${acsEndpoint}" \\
                         --insecure-skip-tls-verify \\
                         image scan \\
                         --image "${imageRef}" \\
@@ -110,6 +114,7 @@ def call(Map config = [:]) {
             ).trim()
             if (scanFileSize.toInteger() < 10 && scanExitCode != 0) {
                 echo "WARNING: ACS image scan failed and produced no results (exit=${scanExitCode}). This is NOT a pass — check ACS connectivity and registry access."
+                failed = true
             }
 
             def duration = (System.currentTimeMillis() - startTime) / 1000

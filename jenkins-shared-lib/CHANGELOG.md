@@ -2,6 +2,41 @@
 
 All notable changes to the DevSecOps Jenkins Shared Library.
 
+## [1.11.0] - 2026-05-22
+
+### Added
+- `verifyImage.groovy` — New function: cosign verify (signature) + cosign verify-attestation (SBOM attestation check)
+- `pipelineMerge.groovy` — Sign Image + Verify Image stages added (same pipeline as build per best practice)
+- `pipelineTag.groovy` — Verify Image stage added between Sign Image and Create Promotion MR
+- `pipelineMR.groovy` — Generate SBOM stage added for SCA+VEX enrichment in MR validation
+- `SecurityGate.groovy` — SBOM, image signing, and image verification gate checks
+- `commentOnMR.groovy` — Signing and verification rows in MR comment table
+- `Dockerfile.agent` — Pre-installed CycloneDX .NET tool v0.27.2 (pinned, /usr/local/bin symlink)
+
+### Fixed
+- `generateSBOM.groovy` — Removed `|| true` that silently swallowed failures for both .NET and Java
+- `generateSBOM.groovy` — Removed empty SBOM fallback (was masking real failures)
+- `generateSBOM.groovy` — Fixed gate: HIGH vulns exceeding threshold now returns FAILURE (was WARNING)
+- `generateSBOM.groovy` — Replaced `sleep 3` with polling loop (10 attempts, 5s interval) for Trustify analysis
+- `generateSBOM.groovy` — Added retry (3 attempts with backoff) for Trustify SBOM upload
+- `generateSBOM.groovy` — Uses pre-installed `dotnet-CycloneDX` binary instead of runtime `dotnet tool install`
+- `signImage.groovy` — Fixed idToken extraction (was reading stdin twice)
+- `signImage.groovy` — Changed UNSTABLE returns to FAILURE (signing errors must block)
+- SBOM gate enforcement in all orchestrators (pipelineMerge, pipelineTag, pipelineMR)
+
+### Removed
+- `signImage.groovy` — Key-based signing fallback (anti-pattern: long-lived keys as Jenkins credentials)
+- `signImage.groovy` — `tryKeyBasedSign()` method and `keyCredId` parameter
+
+### Changed
+- `createPromotionMR.groovy` — Enhanced SBOM row with vulnerability counts, added verification row
+- `commentOnMR.groovy` — SBOM row shows C/H/M/L vulnerability counts + Trustify link
+
+### Policy Matrix Coverage
+- SBOM presence: cosign attestation check → T2, T3 → Block deploy ✅
+- Signature validity: cosign verify → T2, T3 → Block deploy ✅
+- SCA + VEX: Dependency-Check + TPA cache → T1, T2 → Block if exploitable ✅
+
 ## [1.10.0] - 2026-03-08
 
 ### Fixed

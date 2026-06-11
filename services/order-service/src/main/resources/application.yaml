@@ -1,0 +1,70 @@
+# order-service/src/main/resources/application.yaml
+# Configuration for OrderService — all environment-specific values externalized via env vars.
+# On OpenShift, these are injected via ConfigMaps and Secrets mounted as environment variables.
+
+server:
+  port: 8080
+
+spring:
+  application:
+    name: order-service
+
+  # ==================== PostgreSQL Datasource ====================
+  # DATABASE_URL format: jdbc:postgresql://hostname:5432/dbname
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/orderdb}
+    username: ${DATABASE_USER:orderuser}
+    password: ${DATABASE_PASSWORD:orderpass}
+    driver-class-name: org.postgresql.Driver
+    # HikariCP connection pool tuning for containerized workloads
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 5000
+      idle-timeout: 300000
+
+  # ==================== JPA / Hibernate ====================
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
+  # ==================== Redis ====================
+  # Used for caching order lookups to reduce DB load
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2000ms
+
+# ==================== External Service URLs ====================
+# Each downstream service URL is configurable via env var.
+# Defaults use Kubernetes DNS names (service.namespace.svc) for in-cluster communication.
+services:
+  inventory:
+    url: ${INVENTORY_SERVICE_URL:http://inventory-service:8081}
+  payment:
+    url: ${PAYMENT_SERVICE_URL:http://payment-service:8082}
+  sampleapi:
+    url: ${SAMPLEAPI_URL:http://sampleapi.sampleapi-dev.svc:8080}
+
+# ==================== Actuator / Management ====================
+# Expose health and prometheus endpoints for OpenShift probes and Prometheus scraping
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: order-service

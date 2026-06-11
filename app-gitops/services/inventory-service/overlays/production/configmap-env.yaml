@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inventory-service-env
+data:
+  DATABASE_URL: "jdbc:postgresql://postgresql.javaapp-prod.svc:5432/orderservice"
+  DATABASE_USER: "orderservice"
+  REDIS_HOST: "redis.javaapp-prod.svc"
+  REDIS_PORT: "6379"
+  SERVER_PORT: "8081"
+  OTEL_SERVICE_NAME: "inventory-service"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector-collector.openshift-tempo.svc:4317"
+  OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
+  OTEL_RESOURCE_ATTRIBUTES: "service.namespace=javaapp-prod,deployment.environment=production"
+  SPRING_PROFILES_ACTIVE: "production"

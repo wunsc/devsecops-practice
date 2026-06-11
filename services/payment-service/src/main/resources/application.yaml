@@ -1,0 +1,91 @@
+# application.yaml — PaymentService configuration
+# All environment-specific values are externalized via environment variables
+# with sensible defaults for local development.
+
+server:
+  # PaymentService runs on port 8082 to avoid conflicts with other microservices
+  port: ${SERVER_PORT:8082}
+
+spring:
+  application:
+    name: payment-service
+
+  # PostgreSQL datasource — injected from environment for each namespace
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/paymentdb}
+    username: ${DATABASE_USER:payment_user}
+    password: ${DATABASE_PASSWORD:payment_pass}
+    driver-class-name: org.postgresql.Driver
+    # HikariCP connection pool tuning for OpenShift pod resource limits
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:10}
+      minimum-idle: ${DB_POOL_MIN_IDLE:2}
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  # JPA / Hibernate configuration
+  jpa:
+    # ddl-auto=update allows schema evolution without manual migration scripts
+    # In production, consider switching to 'validate' with Flyway/Liquibase
+    hibernate:
+      ddl-auto: update
+    show-sql: ${JPA_SHOW_SQL:false}
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
+  # Redis configuration — used for payment lookup caching
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 5000ms
+      # Lettuce connection pool settings
+      lettuce:
+        pool:
+          max-active: ${REDIS_POOL_MAX_ACTIVE:8}
+          max-idle: ${REDIS_POOL_MAX_IDLE:4}
+          min-idle: ${REDIS_POOL_MIN_IDLE:1}
+
+# Cross-namespace service integration URLs
+# NotificationApi runs in sampleapi-dev namespace (.NET service on port 8081)
+services:
+  notificationapi:
+    url: ${NOTIFICATIONAPI_URL:http://notificationapi.sampleapi-dev.svc:8081}
+
+# Spring Boot Actuator — health probes and Prometheus metrics
+management:
+  endpoints:
+    web:
+      exposure:
+        # Expose health, info, metrics, and prometheus endpoints for monitoring
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      # Show full health details including DB and Redis connectivity
+      show-details: always
+      probes:
+        enabled: true
+  # Prometheus metrics endpoint for OpenShift Monitoring scraping
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  metrics:
+    tags:
+      # Tag all metrics with application name for dashboard filtering
+      application: ${spring.application.name}
+
+# Logging configuration
+logging:
+  level:
+    root: INFO
+    com.devsecops.payment: ${LOG_LEVEL:INFO}
+    org.springframework.web: INFO
+    org.hibernate.SQL: ${HIBERNATE_LOG_LEVEL:WARN}
+  pattern:
+    # Structured logging pattern with trace context for correlation
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [%X{traceId:-},%X{spanId:-}] %-5level %logger{36} - %msg%n"

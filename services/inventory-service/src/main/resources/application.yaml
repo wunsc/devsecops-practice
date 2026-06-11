@@ -1,0 +1,76 @@
+# inventory-service/src/main/resources/application.yaml
+# Inventory Service configuration - all sensitive values externalized via environment variables
+# This follows 12-factor app principles for containerized deployment on OpenShift
+
+server:
+  # Service port - each microservice runs on a distinct port to avoid conflicts during local dev
+  port: 8081
+
+spring:
+  application:
+    name: inventory-service
+
+  # PostgreSQL datasource configuration - credentials injected via OpenShift Secrets
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/inventory}
+    username: ${DATABASE_USER:inventory}
+    password: ${DATABASE_PASSWORD:inventory}
+    driver-class-name: org.postgresql.Driver
+    # HikariCP connection pool settings optimized for containerized workloads
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+      idle-timeout: 600000
+
+  # JPA/Hibernate configuration
+  jpa:
+    # ddl-auto=update: auto-creates/updates schema - suitable for dev/sit environments
+    # For production, use Flyway or Liquibase for controlled schema migrations
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
+  # Redis configuration - used for caching stock levels and query results
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 5000ms
+      # Lettuce connection pool settings for Redis
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 4
+          min-idle: 1
+
+# Spring Boot Actuator - management endpoints for health checks and monitoring
+management:
+  endpoints:
+    web:
+      exposure:
+        # Expose health, metrics, info, and prometheus endpoints for OpenShift monitoring
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      # Show detailed health info including DB and Redis connectivity status
+      show-details: always
+  metrics:
+    tags:
+      # Tag all metrics with application name for Prometheus/Grafana filtering
+      application: ${spring.application.name}
+
+# Logging configuration - structured logging for OpenShift log aggregation (Vector/Loki)
+logging:
+  level:
+    root: INFO
+    com.devsecops.inventory: DEBUG
+    org.springframework.data.redis: WARN
+  pattern:
+    # Include trace/span IDs in log output for distributed tracing correlation
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [%X{traceId}/%X{spanId}] %-5level %logger{36} - %msg%n"

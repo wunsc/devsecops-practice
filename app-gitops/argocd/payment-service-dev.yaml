@@ -1,0 +1,32 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: payment-service-dev
+  namespace: openshift-gitops
+  labels:
+    team: devsecops
+    app: payment-service
+    environment: dev
+spec:
+  project: devsecops
+  source:
+    repoURL: "https://gitlab-devsecops-gitlab.apps.muhrahma-cluster.vmware.tamlab.rdu2.redhat.com/devsecops/app-gitops.git"
+    targetRevision: main
+    path: services/payment-service/overlays/dev
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: javaapp-dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+      - PruneLast=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 1m

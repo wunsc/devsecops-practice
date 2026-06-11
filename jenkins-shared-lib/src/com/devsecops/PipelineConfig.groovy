@@ -38,6 +38,8 @@ class PipelineConfig implements Serializable {
     String activeImageName = ''       // Set by configureForService
     String activeSourceRepo = ''      // Set by configureForService
     Map activeBuildArgs = [:]         // Dockerfile build args for active service
+    String activeLanguage = 'dotnet'  // 'dotnet' or 'java'
+    String activeDockerfile = 'Dockerfile' // 'Dockerfile' or 'Dockerfile.java'
     String notificationApiImageName = 'notificationapi'
 
     // --- SonarQube ---
@@ -71,11 +73,11 @@ class PipelineConfig implements Serializable {
      */
     @NonCPS
     void initFromEnv(def env) {
-        this.gitlabUrl = env.GITLAB_URL ?: 'https://gitlab-devsecops-gitlab.apps.cluster-pmqwq.pmqwq.sandbox270.opentlc.com'
+        this.gitlabUrl = env.GITLAB_URL ?: 'https://gitlab-devsecops-gitlab.apps.muhrahma-cluster.vmware.tamlab.rdu2.redhat.com'
         this.imageRegistry = env.IMAGE_REGISTRY ?: 'image-registry.openshift-image-registry.svc:5000'
-        this.sonarUrl = env.SONARQUBE_URL ?: 'https://sonarqube-devsecops-tools.apps.cluster-pmqwq.pmqwq.sandbox270.opentlc.com'
-        this.acsUrl = env.ACS_CENTRAL_URL ?: 'https://central-stackrox.apps.cluster-pmqwq.pmqwq.sandbox270.opentlc.com'
-        this.argocdServer = env.ARGOCD_SERVER ?: 'openshift-gitops-server-openshift-gitops.apps.cluster-pmqwq.pmqwq.sandbox270.opentlc.com'
+        this.sonarUrl = env.SONARQUBE_URL ?: 'http://sonarqube.devsecops-tools.svc:9000'
+        this.acsUrl = env.ACS_CENTRAL_URL ?: 'https://central.stackrox.svc:443'
+        this.argocdServer = env.ARGOCD_SERVER ?: 'openshift-gitops-server-openshift-gitops.apps.muhrahma-cluster.vmware.tamlab.rdu2.redhat.com'
 
         // Derived values
         this.appSourceRepo = "${this.gitlabUrl}/devsecops/app-source.git"
@@ -84,7 +86,7 @@ class PipelineConfig implements Serializable {
         this.imageNamespace = "${this.appName}-dev"
         this.imageName = this.appName
         this.sonarProjectKey = this.appName
-        this.gitlabProjectId = env.GITLAB_PROJECT_ID ?: '1'
+        this.gitlabProjectId = env.GITLAB_PROJECT_ID ?: '4'
     }
 
     /**
@@ -116,7 +118,7 @@ class PipelineConfig implements Serializable {
      * Sets activeSourceRepo, activeImageName, activeBuildArgs based on service name.
      * Call after initFromEnv() — needs gitlabUrl to derive repo URLs.
      *
-     * Supported services: 'sampleapi', 'notificationapi'
+     * Supported services: 'sampleapi', 'notificationapi', 'order-service', 'inventory-service', 'payment-service'
      */
     @NonCPS
     void configureForService(String serviceName) {
@@ -127,7 +129,40 @@ class PipelineConfig implements Serializable {
                 this.activeSourceRepo = "${this.gitlabUrl}/devsecops/notificationapi-source.git"
                 this.activeBuildArgs = [PROJECT_NAME: 'NotificationApi', SOLUTION_NAME: 'NotificationApi', APP_PORT: '8081']
                 this.sonarProjectKey = 'notificationapi'
-                this.gitlabProjectId = '5'
+                this.gitlabProjectId = '8'
+                break
+            case 'order-service':
+                this.activeImageName = 'order-service'
+                this.activeSourceRepo = "${this.gitlabUrl}/devsecops/order-service.git"
+                this.activeBuildArgs = [SERVICE_NAME: 'order-service', APP_PORT: '8080']
+                this.activeLanguage = 'java'
+                this.activeDockerfile = 'Dockerfile.java'
+                this.imageNamespace = 'javaapp-dev'
+                this.appNamespace = 'javaapp'
+                this.sonarProjectKey = 'order-service'
+                this.gitlabProjectId = '10'
+                break
+            case 'inventory-service':
+                this.activeImageName = 'inventory-service'
+                this.activeSourceRepo = "${this.gitlabUrl}/devsecops/inventory-service.git"
+                this.activeBuildArgs = [SERVICE_NAME: 'inventory-service', APP_PORT: '8081']
+                this.activeLanguage = 'java'
+                this.activeDockerfile = 'Dockerfile.java'
+                this.imageNamespace = 'javaapp-dev'
+                this.appNamespace = 'javaapp'
+                this.sonarProjectKey = 'inventory-service'
+                this.gitlabProjectId = '11'
+                break
+            case 'payment-service':
+                this.activeImageName = 'payment-service'
+                this.activeSourceRepo = "${this.gitlabUrl}/devsecops/payment-service.git"
+                this.activeBuildArgs = [SERVICE_NAME: 'payment-service', APP_PORT: '8082']
+                this.activeLanguage = 'java'
+                this.activeDockerfile = 'Dockerfile.java'
+                this.imageNamespace = 'javaapp-dev'
+                this.appNamespace = 'javaapp'
+                this.sonarProjectKey = 'payment-service'
+                this.gitlabProjectId = '12'
                 break
             default: // sampleapi
                 this.activeImageName = this.imageName

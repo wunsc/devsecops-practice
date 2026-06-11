@@ -49,6 +49,23 @@ class SecurityGate implements Serializable {
             failures.add("Dependency-Check FAILED: ${results.dependencyCheck?.error ?: 'vulnerabilities found'}")
         }
 
+        // Check SBOM generation and vulnerability gate
+        if (results.sbom?.status == 'FAILURE') {
+            def sbomDetail = results.sbom?.critical ?
+                " (Critical: ${results.sbom.critical}, High: ${results.sbom.high})" : ''
+            failures.add("SBOM vulnerability gate FAILED: ${results.sbom?.gateResult ?: 'generation or analysis failed'}${sbomDetail}")
+        }
+
+        // Check image signing (T2/T3 only — absent in T1, safe-nav returns null)
+        if (results.signImage?.status == 'FAILURE') {
+            failures.add("Image signing FAILED: ${results.signImage?.error ?: 'cosign sign failed'}")
+        }
+
+        // Check image verification (T2/T3 only)
+        if (results.verifyImage?.status == 'FAILURE') {
+            failures.add("Image verification FAILED: ${results.verifyImage?.error ?: 'signature or attestation invalid'}")
+        }
+
         // Check OWASP ZAP (if run)
         if (results.owaspZap?.status == 'FAILURE') {
             failures.add("OWASP ZAP DAST scan FAILED: ${results.owaspZap?.error ?: 'vulnerabilities found'}")

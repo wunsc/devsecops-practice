@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: order-service-sit
+  namespace: openshift-gitops
+  labels:
+    team: devsecops
+    app: order-service
+    environment: sit
+spec:
+  project: devsecops
+  source:
+    repoURL: "https://gitlab-devsecops-gitlab.apps.muhrahma-cluster.vmware.tamlab.rdu2.redhat.com/devsecops/app-gitops.git"
+    targetRevision: main
+    path: services/order-service/overlays/sit
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: javaapp-sit
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=false
+      - PruneLast=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 1m

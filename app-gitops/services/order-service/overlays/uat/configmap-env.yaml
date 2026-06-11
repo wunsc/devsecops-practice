@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: order-service-env
+data:
+  DATABASE_URL: "jdbc:postgresql://postgresql.javaapp-uat.svc:5432/orderservice"
+  DATABASE_USER: "orderservice"
+  REDIS_HOST: "redis.javaapp-uat.svc"
+  REDIS_PORT: "6379"
+  SERVER_PORT: "8080"
+  INVENTORY_SERVICE_URL: "http://inventory-service.javaapp-uat.svc:8081"
+  PAYMENT_SERVICE_URL: "http://payment-service.javaapp-uat.svc:8082"
+  SAMPLEAPI_URL: "http://sampleapi.sampleapi-uat.svc:8080"
+  NOTIFICATIONAPI_URL: "http://notificationapi.sampleapi-uat.svc:8081"
+  OTEL_SERVICE_NAME: "order-service"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector-collector.openshift-tempo.svc:4317"
+  OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
+  OTEL_RESOURCE_ATTRIBUTES: "service.namespace=javaapp-uat,deployment.environment=uat"
+  SPRING_PROFILES_ACTIVE: "uat"

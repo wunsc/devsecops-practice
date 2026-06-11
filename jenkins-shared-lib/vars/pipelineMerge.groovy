@@ -79,7 +79,11 @@ def call(Map config = [:]) {
             stage('Build') {
                 steps {
                     script {
-                        results.build = buildDotnet(project: '.')
+                        if (pipelineConfig.activeLanguage == 'java') {
+                            results.build = buildJava(project: '.')
+                        } else {
+                            results.build = buildDotnet(project: '.')
+                        }
                         if (results.build.status == 'FAILURE') {
                             error "Build failed: ${results.build.error}"
                         }
@@ -90,7 +94,11 @@ def call(Map config = [:]) {
             stage('Unit Tests') {
                 steps {
                     script {
-                        results.unitTests = runUnitTests(project: '.')
+                        if (pipelineConfig.activeLanguage == 'java') {
+                            results.unitTests = runJavaTests(project: '.')
+                        } else {
+                            results.unitTests = runUnitTests(project: '.')
+                        }
                     }
                 }
             }
@@ -99,14 +107,23 @@ def call(Map config = [:]) {
                 steps {
                     script {
                         def shortSha = results.commitSha ? results.commitSha.take(7) : 'unknown'
-                        results.sonarqube = scanSonarQube(
-                            projectKey: pipelineConfig.sonarProjectKey,
-                            sonarUrl: pipelineConfig.sonarUrl,
-                            project: '.',
-                            projectVersion: "main-${shortSha}",
-                            analysisMode: 'merge',
-                            branchName: 'main'
-                        )
+                        if (pipelineConfig.activeLanguage == 'java') {
+                            results.sonarqube = scanSonarQubeJava(
+                                projectKey: pipelineConfig.sonarProjectKey,
+                                sonarUrl: pipelineConfig.sonarUrl,
+                                project: '.',
+                                projectVersion: "main-${shortSha}"
+                            )
+                        } else {
+                            results.sonarqube = scanSonarQube(
+                                projectKey: pipelineConfig.sonarProjectKey,
+                                sonarUrl: pipelineConfig.sonarUrl,
+                                project: '.',
+                                projectVersion: "main-${shortSha}",
+                                analysisMode: 'merge',
+                                branchName: 'main'
+                            )
+                        }
                         if (results.sonarqube.status == 'FAILURE') {
                             unstable "SonarQube quality gate failed: ${results.sonarqube.gateStatus ?: results.sonarqube.error}"
                         }
@@ -127,11 +144,29 @@ def call(Map config = [:]) {
                 }
             }
 
+            stage('Generate SBOM') {
+                steps {
+                    script {
+                        results.sbom = generateSBOM(
+                            project: '.',
+                            language: pipelineConfig.activeLanguage,
+                            serviceName: serviceName,
+                            imageTag: pipelineConfig.imageTag
+                        )
+                        if (results.sbom.status == 'FAILURE') {
+                            error "SBOM gate FAILED: ${results.sbom.gateResult} " +
+                                  "(Critical: ${results.sbom.critical ?: 0}, High: ${results.sbom.high ?: 0})"
+                        }
+                    }
+                }
+            }
+
             stage('Build Container Image') {
                 steps {
                     script {
+                        def dockerfilePath = pipelineConfig.activeLanguage == 'java' ? 'build-config/Dockerfile.java' : 'build-config/Dockerfile'
                         results.imageBuild = buildContainerImage(
-                            dockerfile: 'build-config/Dockerfile',
+                            dockerfile: dockerfilePath,
                             imageRef: pipelineConfig.getActiveImageRef(),
                             buildArgs: pipelineConfig.activeBuildArgs
                         )
@@ -151,6 +186,34 @@ def call(Map config = [:]) {
                         )
                         if (results.push.status == 'FAILURE') {
                             error "Push failed: ${results.push.error}"
+                        }
+                    }
+                }
+            }
+
+            stage('Sign Image') {
+                steps {
+                    script {
+                        def sbom = results.sbom?.sbomFile ?: ''
+                        results.signImage = signImage(
+                            imageRef: pipelineConfig.getActiveImageRef(),
+                            sbomFile: sbom
+                        )
+                        if (results.signImage.status == 'FAILURE') {
+                            error "Image signing failed: ${results.signImage.error ?: 'unknown'}"
+                        }
+                    }
+                }
+            }
+
+            stage('Verify Image') {
+                steps {
+                    script {
+                        results.verifyImage = verifyImage(
+                            imageRef: pipelineConfig.getActiveImageRef()
+                        )
+                        if (results.verifyImage.status == 'FAILURE') {
+                            error "Image verification failed — signature invalid"
                         }
                     }
                 }

@@ -56,7 +56,11 @@ if (!string.IsNullOrEmpty(otelEndpoint))
                         !ctx.Request.Path.StartsWithSegments("/metrics");
                 })
                 .AddHttpClientInstrumentation()                // Outgoing HTTP (→ NotificationApi)
-                .AddEntityFrameworkCoreInstrumentation()        // PostgreSQL query spans
+                .AddEntityFrameworkCoreInstrumentation(opts =>
+                {
+                    opts.SetDbStatementForText = true;     // Include SQL text in span attributes
+                    opts.SetDbStatementForStoredProcedure = true;
+                })
                 .AddRedisInstrumentation()                     // Redis command spans
                 .AddOtlpExporter(opts =>
                 {
@@ -101,6 +105,20 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+// Auto-create database tables if they don't exist
+using (var scope = app.Services.CreateScope())
+{
+    try
+    {
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Database.EnsureCreated();
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogWarning(ex, "Could not auto-create database tables — PostgreSQL may be unavailable");
+    }
+}
 
 if (swaggerEnabled)
 {

@@ -17,8 +17,7 @@ spec:
     metadata:
       labels:
         app: sampleapi
-      annotations:
-        instrumentation.opentelemetry.io/inject-dotnet: "dotnet-instrumentation"
+      annotations: {}
     spec:
       serviceAccountName: sampleapi-sa
       containers:

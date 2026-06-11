@@ -18,5 +18,7 @@ data:
   REDIS_URL: "redis.sampleapi-dev.svc:6379"
   NOTIFICATION_API_URL: "http://notificationapi.sampleapi-dev.svc:8081"
   EF_MIGRATE_ON_STARTUP: "true"
-  # OpenTelemetry tracing (Phase 22) — auto-instrumentation injects OTEL_* env vars
-  # via the Instrumentation CR webhook. No need to set them here.
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector-collector.openshift-tempo.svc:4317"
+  OTEL_SERVICE_NAME: "sampleapi"
+  OTEL_LOG_LEVEL: "debug"
+  OTEL_DOTNET_AUTO_LOG_DIRECTORY: "/tmp"

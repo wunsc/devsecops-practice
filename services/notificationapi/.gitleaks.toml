@@ -1,38 +1,144 @@
-# app-source/.gitleaks.toml
-# Gitleaks configuration for secret detection in pre-commit hooks
-# Prevents accidental commit of passwords, API keys, tokens, etc.
+# infra/phase13/gitleaks-config.toml
+# Gitleaks secret detection configuration
+#
+# This file defines rules for detecting secrets in source code.
+# Copy to app-source/.gitleaks.toml for pre-commit hook usage.
+#
+# KNOWN FIX: Jenkins credential ID strings (e.g., 'gitlab-api-token')
+# trigger generic-secret rules. Use allowlist patterns to suppress.
 
-title = "SampleAPI Gitleaks Config"
+title = "DevSecOps Gitleaks Configuration"
 
-# Use the default rules plus custom allowlist
-[extend]
-useDefault = true
-
-# Allowlist — suppress known false positives
+# =====================================================
+# Global Allowlist — patterns that are always ignored
+# =====================================================
 [allowlist]
   description = "Global allowlist for known false positives"
 
-  # Jenkins credential ID strings are not secrets — they're just identifiers
-  # e.g., 'gitlab-api-token', 'sonarqube-token' in documentation
-  regexes = [
-    '''credential[sI][dD]?\s*[:=]\s*['\"][\w-]+['\"]''',
-  ]
-
-  # Files that are known to not contain real secrets
+  # Paths to ignore entirely
   paths = [
-    '''appsettings\.json$''',
-    '''appsettings\.\w+\.json$''',
-    '''\.csproj$''',
-    '''\.sln$''',
+    '''(^|/)\.gitleaks\.toml$''',
+    '''(^|/)\.pre-commit-config\.yaml$''',
+    '''(^|/)go\.sum$''',
+    '''(^|/)package-lock\.json$''',
+    '''(^|/)yarn\.lock$''',
+    '''(^|/)\.git/''',
+    '''(^|/)test[s]?/''',
+    '''(^|/)__tests__/''',
+    '''\.test\.(cs|js|ts)$''',
+    '''Tests\.cs$''',
   ]
 
-# Additional rules for .NET-specific patterns
+  # Regex patterns for values that are not secrets
+  regexes = [
+    # Jenkins credential ID references (not actual secrets)
+    '''credentialsId:\s*['"][\w-]+['"]''',
+    '''tokenCredId:\s*['"][\w-]+['"]''',
+    # .NET configuration keys (not secrets)
+    '''GetSection\(['"][\w:]+['"]\)''',
+    # Placeholder/example values
+    '''<[\w-]+-placeholder>''',
+    '''CHANGE[-_]ME''',
+    '''example\.com''',
+    '''localhost''',
+    '''svc\.cluster\.local''',
+  ]
+
+# =====================================================
+# Custom Rules — project-specific secret patterns
+# =====================================================
+
+[[rules]]
+  id = "gitlab-personal-access-token"
+  description = "GitLab Personal Access Token"
+  regex = '''glpat-[0-9a-zA-Z_\-]{20,}'''
+  tags = ["gitlab", "token"]
+  keywords = ["glpat-"]
+
+[[rules]]
+  id = "gitlab-runner-token"
+  description = "GitLab Runner Registration Token"
+  regex = '''GR1348941[0-9a-zA-Z_\-]{20,}'''
+  tags = ["gitlab", "runner"]
+  keywords = ["GR1348941"]
+
+[[rules]]
+  id = "sonarqube-token"
+  description = "SonarQube Authentication Token"
+  regex = '''sqa_[0-9a-f]{40}'''
+  tags = ["sonarqube", "token"]
+  keywords = ["sqa_"]
+
+[[rules]]
+  id = "openshift-token"
+  description = "OpenShift/Kubernetes Service Account Token"
+  regex = '''eyJhbGciOiJSUzI1NiIs[A-Za-z0-9_\-\.]{100,}'''
+  tags = ["openshift", "kubernetes", "jwt"]
+  keywords = ["eyJhbGciOiJSUzI1NiIs"]
+
 [[rules]]
   id = "dotnet-connection-string"
-  description = "Connection string with embedded password"
+  description = ".NET Connection String with Password"
   regex = '''(?i)(password|pwd)\s*=\s*[^\s;]{8,}'''
-  tags = ["dotnet", "connection-string"]
-
+  tags = ["dotnet", "database"]
+  keywords = ["password=", "pwd="]
   [rules.allowlist]
-    # Allow example/placeholder connection strings in appsettings
-    regexes = ['''CHANGE_ME''', '''<.*>''', '''placeholder''', '''example''']
+    regexes = [
+      '''<[\w-]+>''',
+      '''CHANGE[-_]ME''',
+      '''placeholder''',
+    ]
+
+[[rules]]
+  id = "private-key"
+  description = "Private Key (PEM format)"
+  regex = '''-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----'''
+  tags = ["key", "pem"]
+  keywords = ["PRIVATE KEY"]
+
+[[rules]]
+  id = "aws-access-key"
+  description = "AWS Access Key ID"
+  regex = '''(?i)AKIA[0-9A-Z]{16}'''
+  tags = ["aws", "key"]
+  keywords = ["AKIA"]
+
+[[rules]]
+  id = "generic-api-key"
+  description = "Generic API Key pattern"
+  regex = '''(?i)(api[_-]?key|apikey|api[_-]?secret)\s*[:=]\s*['"]?[a-zA-Z0-9_\-]{20,}['"]?'''
+  tags = ["api", "key"]
+  keywords = ["api_key", "apikey", "api-key", "api_secret"]
+  [rules.allowlist]
+    regexes = [
+      '''<[\w-]+>''',
+      '''example''',
+      '''placeholder''',
+      '''credentialsId''',
+    ]
+
+[[rules]]
+  id = "generic-password"
+  description = "Generic Password in code"
+  regex = '''(?i)(password|passwd|pwd|secret)\s*[:=]\s*['"][^'"]{8,}['"]'''
+  tags = ["password"]
+  keywords = ["password", "passwd", "pwd", "secret"]
+  [rules.allowlist]
+    paths = [
+      '''appsettings.*\.json$''',
+      '''\.yaml$''',
+      '''\.yml$''',
+    ]
+    regexes = [
+      '''<[\w-]+>''',
+      '''CHANGE[-_]ME''',
+      '''placeholder''',
+      '''DevSec0ps''',
+    ]
+
+[[rules]]
+  id = "cosign-private-key"
+  description = "Cosign Private Key"
+  regex = '''-----BEGIN ENCRYPTED COSIGN PRIVATE KEY-----'''
+  tags = ["cosign", "key"]
+  keywords = ["COSIGN PRIVATE KEY"]

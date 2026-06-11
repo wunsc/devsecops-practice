@@ -49,7 +49,7 @@ def call(Map config = [:]) {
             writeFile file: '/tmp/mr-comment.json', text: groovy.json.JsonOutput.toJson([body: comment])
 
             sh """
-                curl -sf -X POST "${gitlabUrl}/api/v4/projects/${projectId}/merge_requests/${mrIid}/notes" \
+                curl -sfk -X POST "${gitlabUrl}/api/v4/projects/${projectId}/merge_requests/${mrIid}/notes" \
                     -H "PRIVATE-TOKEN: \${GITLAB_TOKEN}" \
                     -H "Content-Type: application/json" \
                     --data-binary @/tmp/mr-comment.json || echo "WARNING: Failed to post MR comment"
@@ -88,7 +88,7 @@ private String lookupMRFromCommit(String gitlabUrl, String projectId, String tok
         withCredentials([string(credentialsId: tokenCredId, variable: 'GITLAB_TOKEN')]) {
             mrJson = sh(
                 script: """
-                    curl -sf "${gitlabUrl}/api/v4/projects/${projectId}/repository/commits/${commitSha}/merge_requests" \
+                    curl -sfk "${gitlabUrl}/api/v4/projects/${projectId}/repository/commits/${commitSha}/merge_requests" \
                         -H "PRIVATE-TOKEN: \${GITLAB_TOKEN}" 2>/dev/null || echo '[]'
                 """,
                 returnStdout: true
@@ -178,6 +178,42 @@ private String buildComment(String status, Map results, String failedStage, Stri
         sb.append("| Dependency Check (SCA) | ${depIcon} ${depResult.status} | ${depDetail} |\n")
     }
 
+    // SBOM
+    def sbomResult = results.sbom
+    if (sbomResult) {
+        def sbomIcon = sbomResult.status == 'SUCCESS' ? ':white_check_mark:' :
+            (sbomResult.gateResult == 'FAILED' ? ':x:' : ':warning:')
+        def vulnSummary = ''
+        if (sbomResult.totalVulns != null && (sbomResult.totalVulns as int) > 0) {
+            vulnSummary = " | C:**${sbomResult.critical ?: 0}** H:**${sbomResult.high ?: 0}** " +
+                          "M:**${sbomResult.medium ?: 0}** L:**${sbomResult.low ?: 0}**"
+        }
+        def trustifyLink = sbomResult.trustifyUrl ? " | [Trustify](${sbomResult.trustifyUrl})" : ''
+        sb.append("| SBOM (CycloneDX) | ${sbomIcon} ${sbomResult.status} | " +
+                  "**${sbomResult.components ?: 0}** components, Upload: ${sbomResult.uploadStatus ?: 'N/A'}${vulnSummary}${trustifyLink} |\n")
+    }
+
+    // Image Signing (T2/T3 only)
+    def signResult = results.signImage
+    if (signResult) {
+        def signIcon = signResult.status == 'SUCCESS' ? ':white_check_mark:' : ':x:'
+        def signDetail = signResult.status == 'SUCCESS' ?
+            "Keyless (RHTAS) | Attestation: ${signResult.attestStatus ?: 'N/A'}" :
+            "Error: ${signResult.error ?: 'failed'}"
+        sb.append("| Image Signing | ${signIcon} ${signResult.status} | ${signDetail} |\n")
+    }
+
+    // Image Verification (T2/T3 only)
+    def verifyResult = results.verifyImage
+    if (verifyResult) {
+        def verifyIcon = verifyResult.status == 'SUCCESS' ? ':white_check_mark:' : ':x:'
+        def verifyDetail = verifyResult.status == 'SUCCESS' ?
+            "Signature: ${verifyResult.signatureValid ? 'VALID' : 'INVALID'} | " +
+            "Attestation: ${verifyResult.attestationValid ? 'VALID' : 'INVALID'}" :
+            "Error: ${verifyResult.error ?: 'verification failed'}"
+        sb.append("| Image Verification | ${verifyIcon} ${verifyResult.status} | ${verifyDetail} |\n")
+    }
+
     // ── T2-only stages (merge pipeline) ──
 
     // Container Image Build
@@ -206,10 +242,11 @@ private String buildComment(String status, Map results, String failedStage, Stri
     if (acsResult) {
         def acsCritical = acsResult.criticalCount ?: 0
         def acsHigh = acsResult.highCount ?: 0
-        def acsIcon = (acsCritical > 0) ? ':x:' : (acsHigh > 0 ? ':warning:' : ':white_check_mark:')
-        def acsDetail = (acsResult.status != 'FAILURE' || acsResult.criticalCount != null) ?
-            "Critical: **${acsCritical}** / High: **${acsHigh}**" :
-            "Error: ${acsResult.error ?: 'unknown'}"
+        def acsIcon = (acsResult.status == 'FAILURE') ? ':x:' :
+            (acsCritical > 0) ? ':x:' : (acsHigh > 0 ? ':warning:' : ':white_check_mark:')
+        def acsDetail = (acsResult.status == 'FAILURE' && acsCritical == 0 && acsHigh == 0) ?
+            "Error: ${acsResult.error ?: 'scan failed — check ACS connectivity'}" :
+            "Critical: **${acsCritical}** / High: **${acsHigh}**"
         sb.append("| ACS Image Scan | ${acsIcon} ${acsResult.status} | ${acsDetail} |\n")
     }
 
@@ -246,6 +283,12 @@ private String buildComment(String status, Map results, String failedStage, Stri
             if (acsResult) {
                 sb.append("- ACS image scan: **${acsResult.criticalCount ?: 0}** critical, **${acsResult.highCount ?: 0}** high\n")
             }
+            if (signResult?.status == 'SUCCESS') {
+                sb.append("- Image signed: **keyless (RHTAS)** | SBOM attested: **${signResult.sbomAttested ? 'yes' : 'no'}**\n")
+            }
+            if (verifyResult?.status == 'SUCCESS') {
+                sb.append("- Signature verified: **${verifyResult.signatureValid ? 'valid' : 'invalid'}**\n")
+            }
             if (sonarResult?.report) {
                 sb.append("- [View SonarQube Report](${sonarResult.report})\n")
             }
@@ -262,6 +305,14 @@ private String buildComment(String status, Map results, String failedStage, Stri
             }
             if (depResult?.findings != null) {
                 sb.append("- Dependency vulnerabilities: **${depResult.findings}**\n")
+            }
+            if (sbomResult?.totalVulns != null && (sbomResult.totalVulns as int) > 0) {
+                sb.append("- SBOM vulnerabilities: **${sbomResult.critical ?: 0}** critical, " +
+                          "**${sbomResult.high ?: 0}** high")
+                if (sbomResult.trustifyUrl) {
+                    sb.append(" — [View in Trustify](${sbomResult.trustifyUrl})")
+                }
+                sb.append("\n")
             }
             sb.append("\n> This MR is ready for code review and approval.\n")
         }

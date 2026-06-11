@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: order-service-env
+data:
+  DATABASE_URL: "jdbc:postgresql://postgresql.javaapp-sit.svc:5432/orderservice"
+  DATABASE_USER: "orderservice"
+  REDIS_HOST: "redis.javaapp-sit.svc"
+  REDIS_PORT: "6379"
+  SERVER_PORT: "8080"
+  INVENTORY_SERVICE_URL: "http://inventory-service.javaapp-sit.svc:8081"
+  PAYMENT_SERVICE_URL: "http://payment-service.javaapp-sit.svc:8082"
+  SAMPLEAPI_URL: "http://sampleapi.sampleapi-sit.svc:8080"
+  NOTIFICATIONAPI_URL: "http://notificationapi.sampleapi-sit.svc:8081"
+  OTEL_SERVICE_NAME: "order-service"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector-collector.openshift-tempo.svc:4317"
+  OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
+  OTEL_RESOURCE_ATTRIBUTES: "service.namespace=javaapp-sit,deployment.environment=sit"
+  SPRING_PROFILES_ACTIVE: "sit"

@@ -85,7 +85,7 @@ def call(Map config = [:]) {
             stage('Build') {
                 steps {
                     script {
-                        results.build = buildDotnet(project: '.')
+                        if (pipelineConfig.activeLanguage == 'java') { results.build = buildJava(project: '.') } else { results.build = buildDotnet(project: '.') }
                         if (results.build.status == 'FAILURE') {
                             error "Build failed: ${results.build.error}"
                         }
@@ -96,7 +96,7 @@ def call(Map config = [:]) {
             stage('Unit Tests') {
                 steps {
                     script {
-                        results.unitTests = runUnitTests(project: '.')
+                        if (pipelineConfig.activeLanguage == 'java') { results.unitTests = runJavaTests(project: '.') } else { results.unitTests = runUnitTests(project: '.') }
                     }
                 }
             }
@@ -111,15 +111,24 @@ def call(Map config = [:]) {
                         def mrIid = env.gitlabMergeRequestIid ?: ''
                         def versionLabel = mrIid ? "MR-${mrIid}-${branch}" : "branch-${branch}"
 
-                        results.sonarqube = scanSonarQube(
-                            projectKey: pipelineConfig.sonarProjectKey,
-                            sonarUrl: pipelineConfig.sonarUrl,
-                            project: '.',
-                            projectVersion: versionLabel,
-                            analysisMode: 'mr',
-                            branchName: branch,
-                            mrIid: mrIid
-                        )
+                        if (pipelineConfig.activeLanguage == 'java') {
+                            results.sonarqube = scanSonarQubeJava(
+                                projectKey: pipelineConfig.sonarProjectKey,
+                                sonarUrl: pipelineConfig.sonarUrl,
+                                project: '.',
+                                projectVersion: versionLabel
+                            )
+                        } else {
+                            results.sonarqube = scanSonarQube(
+                                projectKey: pipelineConfig.sonarProjectKey,
+                                sonarUrl: pipelineConfig.sonarUrl,
+                                project: '.',
+                                projectVersion: versionLabel,
+                                analysisMode: 'mr',
+                                branchName: branch,
+                                mrIid: mrIid
+                            )
+                        }
                         if (results.sonarqube.status == 'FAILURE') {
                             unstable "SonarQube quality gate failed: ${results.sonarqube.gateStatus ?: results.sonarqube.error}"
                         }
@@ -136,6 +145,27 @@ def call(Map config = [:]) {
                             project: 'src/',
                             suppressionFile: suppressionFile
                         )
+                    }
+                }
+            }
+
+            stage('Generate SBOM') {
+                steps {
+                    script {
+                        // T1: Generate SBOM + upload to Trustify for VEX enrichment
+                        // Lenient thresholds for MR validation — strict enforcement on T2/T3
+                        results.sbom = generateSBOM(
+                            project: '.',
+                            language: pipelineConfig.activeLanguage,
+                            serviceName: serviceName,
+                            imageTag: "mr-${env.gitlabMergeRequestIid ?: 'unknown'}",
+                            maxCritical: 0,
+                            maxHigh: 10
+                        )
+                        if (results.sbom.status == 'FAILURE') {
+                            unstable "SBOM vulnerability gate: ${results.sbom.gateResult} " +
+                                     "(Critical: ${results.sbom.critical ?: 0}, High: ${results.sbom.high ?: 0})"
+                        }
                     }
                 }
             }

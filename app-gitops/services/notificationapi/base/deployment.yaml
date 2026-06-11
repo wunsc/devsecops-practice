@@ -54,9 +54,10 @@ spec:
             timeoutSeconds: 3
             failureThreshold: 3
           # Readiness probe — is the app ready for traffic?
+          # Uses /healthz (not /readyz) because /readyz checks Redis which may not be deployed
           readinessProbe:
             httpGet:
-              path: /readyz
+              path: /healthz
               port: 8081
             initialDelaySeconds: 5
             periodSeconds: 10

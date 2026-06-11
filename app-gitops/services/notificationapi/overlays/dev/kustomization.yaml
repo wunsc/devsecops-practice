@@ -17,4 +17,4 @@ patches:
 images:
 - name: notificationapi
   newName: image-registry.openshift-image-registry.svc:5000/sampleapi-dev/notificationapi
-  newTag: main-03a9411
+  newTag: main-ef175b2

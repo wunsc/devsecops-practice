@@ -17,4 +17,4 @@ patches:
 images:
 - name: sampleapi
   newName: image-registry.openshift-image-registry.svc:5000/sampleapi-dev/sampleapi
-  newTag: v1.5.1
+  newTag: v1.5.0
