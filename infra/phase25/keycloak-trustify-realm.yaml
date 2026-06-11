@@ -1,0 +1,47 @@
+# infra/phase25/keycloak-trustify-realm.yaml
+# Imports the "trustify" realm into Keycloak — used by both RHTAS (Fulcio OIDC) and RHTPA (Trustify)
+#
+# Clients:
+#   - frontend: Public client for Trustify web UI
+#   - testing-manager: Confidential client for API access (service accounts)
+#   - trusted-artifact-signer: Added to Fulcio OIDC config (see phase26)
+#
+# Users:
+#   - admin / admin123: Realm admin for Trustify
+apiVersion: k8s.keycloak.org/v2alpha1
+kind: KeycloakRealmImport
+metadata:
+  name: trustify-realm
+  namespace: rhbok-operator
+spec:
+  keycloakCRName: keycloak
+  realm:
+    realm: trustify
+    displayName: Trustify
+    enabled: true
+    users:
+      - username: admin
+        enabled: true
+        credentials:
+          - type: password
+            value: admin123                            # ← CHANGE in production
+        realmRoles:
+          - default-roles-trustify
+    clients:
+      - clientId: frontend
+        enabled: true
+        publicClient: true
+        standardFlowEnabled: true
+        directAccessGrantsEnabled: true
+        redirectUris:
+          - "*"
+        webOrigins:
+          - "*"
+      - clientId: testing-manager
+        enabled: true
+        clientAuthenticatorType: client-secret
+        secret: R8bOpFQxP2D8aLGE9RDQBBU1DG0gEdmn
+        publicClient: false
+        standardFlowEnabled: false
+        directAccessGrantsEnabled: true
+        serviceAccountsEnabled: true

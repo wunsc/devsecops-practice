@@ -1,0 +1,98 @@
+# infra/phase27/trustedprofileanalyzer-instance.yaml
+# TrustedProfileAnalyzer CR — deploys Trustify server + importer
+#
+# The OIDC config points to Keycloak trustify realm.
+# The walker client is used by Jenkins pipeline for SBOM upload.
+# Keycloak CA cert must be mounted for TLS trust (self-signed cert).
+apiVersion: rhtpa.io/v1
+kind: TrustedProfileAnalyzer
+metadata:
+  name: trustedprofileanalyzer-sample
+  namespace: test-app
+spec:
+  appDomain: apps.<CLUSTER_DOMAIN>                     # ← REPLACE
+  replicas: 1
+  oidc:
+    issuerUrl: https://keycloak.apps.<CLUSTER_DOMAIN>/realms/trustify    # ← REPLACE
+    clients:
+      frontend:
+        clientId: frontend
+      cli:
+        clientId: walker
+        clientSecret: walker-secret-rhtpa-2026         # Pipeline SBOM upload client
+  database:
+    host: rhtpa-postgresql.test-app.svc.cluster.local
+    port: "5432"
+    name: trustify
+    username: trustify
+    password: trustify-db-2026                         # ← CHANGE in production
+  storage:
+    type: s3
+    bucket: rhtpa-cee30132-a77e-40f8-a3c9-c3ee43e1a799   # ← REPLACE with your OBC bucket
+    region: https://s3.openshift-storage.svc:443
+    accessKey: <ACCESS_KEY>                             # ← From ObjectBucketClaim
+    secretKey: <SECRET_KEY>                             # ← From ObjectBucketClaim
+    pathStyle: true
+  tls:
+    additionalTrustAnchor: /etc/keycloak-ca/ca.crt     # Trust Keycloak self-signed cert
+  extraVolumes:
+    - name: keycloak-ca
+      configMap:
+        name: keycloak-tls-ca                          # Created in phase25
+  extraVolumeMounts:
+    - name: keycloak-ca
+      mountPath: /etc/keycloak-ca
+      readOnly: true
+  ingress:
+    enabled: true                                       # Creates Route for Trustify web UI
+  openshift:
+    useServiceCa: true
+  modules:
+    createDatabase:
+      enabled: true
+      image: {}
+    migrateDatabase:
+      enabled: true
+      image: {}
+    server:
+      enabled: true
+      replicas: 1
+      resources:
+        requests:
+          cpu: 1
+          memory: 4Gi
+      image: {}
+      infrastructure: {}
+      ingress: {}
+      metrics: {}
+      rust: {}
+      tracing: {}
+    importer:
+      enabled: true
+      replicas: 1
+      concurrency: 1
+      resources:
+        requests:
+          cpu: 1
+          memory: 4Gi
+      workingDirectory:
+        size: 32Gi                                      # Importer downloads large advisory datasets
+      image: {}
+      infrastructure: {}
+      metrics: {}
+      rust: {}
+      tracing: {}
+    createImporters:
+      enabled: false                                    # We create importers manually
+      image: {}
+      importers: {}
+  infrastructure:
+    port: 9010
+  metrics:
+    enabled: false
+  collector: {}
+  image: {}
+  rust: {}
+  tracing:
+    enabled: false
+  partOf: trustify

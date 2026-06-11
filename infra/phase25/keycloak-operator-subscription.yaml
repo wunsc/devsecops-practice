@@ -1,0 +1,29 @@
+# infra/phase25/keycloak-operator-subscription.yaml
+# Red Hat Build of Keycloak (RHBK) Operator — provides OIDC for RHTAS and RHTPA
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rhbok-operator
+  annotations:
+    openshift.io/description: "Red Hat Build of Keycloak — OIDC provider for supply chain security"
+---
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: rhbk-operator-group
+  namespace: rhbok-operator
+spec:
+  targetNamespaces:
+    - rhbok-operator
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: rhbk-operator
+  namespace: rhbok-operator
+spec:
+  channel: stable-v26.4
+  installPlanApproval: Manual
+  name: rhbk-operator
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace

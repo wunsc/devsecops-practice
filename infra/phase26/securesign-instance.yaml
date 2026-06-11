@@ -1,0 +1,55 @@
+# infra/phase26/securesign-instance.yaml
+# Securesign CR — deploys all Sigstore components (Fulcio, Rekor, CTLog, TUF, Trillian, TSA)
+#
+# Fulcio is configured to accept OIDC tokens from Keycloak trustify realm.
+# The ClientID must match the client registered in Keycloak.
+apiVersion: rhtas.redhat.com/v1alpha1
+kind: Securesign
+metadata:
+  name: securesign
+  namespace: trusted-artifact-signer
+spec:
+  fulcio:
+    certificate:
+      commonName: fulcio.lab
+      organizationName: DevSecOps Lab
+      organizationEmail: devsecops@lab.redhat.com
+    config:
+      OIDCIssuers:
+        - ClientID: trusted-artifact-signer
+          Issuer: https://keycloak.apps.<CLUSTER_DOMAIN>/realms/trustify       # ← REPLACE
+          IssuerURL: https://keycloak.apps.<CLUSTER_DOMAIN>/realms/trustify    # ← REPLACE
+          Type: email
+    externalAccess:
+      enabled: true                    # Creates a Route for fulcio-server
+  rekor:
+    externalAccess:
+      enabled: true                    # Creates a Route for rekor-server
+    attestations:
+      enabled: true                    # Enables SBOM attestation storage
+      maxSize: 100Ki
+      url: file:///var/run/attestations?no_tmp_dir=true
+    backFillRedis:
+      enabled: true
+      schedule: "0 0 * * *"           # Daily backfill
+  ctlog: {}
+  trillian:
+    database:
+      create: true                     # Operator creates MariaDB for Trillian
+  tuf:
+    externalAccess:
+      enabled: true
+  timestampAuthority:
+    externalAccess:
+      enabled: true
+    signer:
+      certificateChain:
+        rootCA:
+          commonName: lab-tsa-root
+          organizationName: DevSecOps Lab
+        intermediateCA:
+          - commonName: lab-tsa-intermediate
+            organizationName: DevSecOps Lab
+        leafCA:
+          commonName: lab-tsa-leaf
+          organizationName: DevSecOps Lab

@@ -1,0 +1,78 @@
+# infra/phase27/rhtpa-importers.yaml
+# RHTPA vulnerability data importers — these feed the advisory database
+#
+# After Trustify server is running, apply these CronJobs to import:
+# 1. CVE database from cve.org
+# 2. Red Hat CSAF v2 advisories
+# 3. CWE weakness database
+#
+# Note: First import can take 30-60 minutes for CVE database (250K+ entries)
+---
+# To create importers via the Trustify API instead of CRDs:
+# Get a token first:
+#   TOKEN=$(curl -sfk -d "client_id=walker&client_secret=walker-secret-rhtpa-2026&grant_type=client_credentials" \
+#     "https://keycloak.apps.<cluster>/realms/trustify/protocol/openid-connect/token" \
+#     | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+#
+# Create CVE importer:
+#   curl -sfk -X POST "${TRUSTIFY_URL}/api/v2/importer" \
+#     -H "Authorization: Bearer $TOKEN" \
+#     -H "Content-Type: application/json" \
+#     -d '{
+#       "name": "cve-database",
+#       "configuration": {
+#         "cve": {
+#           "source": "https://github.com/CVEProject/cvelistV5",
+#           "period": "12h",
+#           "years": ["2023", "2024", "2025", "2026"]
+#         }
+#       }
+#     }'
+#
+# Create Red Hat CSAF importer:
+#   curl -sfk -X POST "${TRUSTIFY_URL}/api/v2/importer" \
+#     -H "Authorization: Bearer $TOKEN" \
+#     -H "Content-Type: application/json" \
+#     -d '{
+#       "name": "redhat-csaf",
+#       "configuration": {
+#         "csaf": {
+#           "source": "https://security.access.redhat.com/.well-known/csaf-v2/provider-metadata.json",
+#           "period": "12h",
+#           "v3Signatures": true
+#         }
+#       }
+#     }'
+#
+# Create CWE importer:
+#   curl -sfk -X POST "${TRUSTIFY_URL}/api/v2/importer" \
+#     -H "Authorization: Bearer $TOKEN" \
+#     -H "Content-Type: application/json" \
+#     -d '{
+#       "name": "cwe-database",
+#       "configuration": {
+#         "cwe": {
+#           "period": "168h"
+#         }
+#       }
+#     }'
+#
+# Check importer status:
+#   curl -sfk -H "Authorization: Bearer $TOKEN" "${TRUSTIFY_URL}/api/v2/importer" | python3 -m json.tool
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rhtpa-importer-instructions
+  namespace: test-app
+data:
+  README: |
+    RHTPA importers are created via the Trustify REST API after the server is running.
+    See the comments in this file (rhtpa-importers.yaml) for the exact curl commands.
+
+    Importers configured on this cluster:
+    - cve-database: CVE data from cve.org (2023-2026)
+    - redhat-csaf: Red Hat CSAF v2 security advisories
+    - cwe-database: CWE weakness database
+
+    Total advisories after initial import: ~103K+
+    Total CWE weaknesses: ~969

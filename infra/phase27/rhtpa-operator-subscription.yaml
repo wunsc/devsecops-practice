@@ -1,0 +1,29 @@
+# infra/phase27/rhtpa-operator-subscription.yaml
+# Red Hat Trusted Profile Analyzer Operator — SBOM management and vulnerability analysis
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: test-app
+  annotations:
+    openshift.io/description: "RHTPA (Trustify) — SBOM storage, vulnerability analysis, advisory tracking"
+---
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: rhtpa-operator-group
+  namespace: test-app
+spec:
+  targetNamespaces:
+    - test-app
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: rhtpa-operator
+  namespace: test-app
+spec:
+  channel: stable-v1.1
+  installPlanApproval: Manual
+  name: rhtpa-operator
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace

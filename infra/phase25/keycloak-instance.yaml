@@ -1,0 +1,28 @@
+# infra/phase25/keycloak-instance.yaml
+# Red Hat Build of Keycloak instance — OIDC provider for RHTAS Fulcio + RHTPA Trustify
+apiVersion: k8s.keycloak.org/v2alpha1
+kind: Keycloak
+metadata:
+  name: keycloak
+  namespace: rhbok-operator
+spec:
+  instances: 1
+  hostname:
+    hostname: keycloak.apps.<CLUSTER_DOMAIN>          # ← REPLACE with your cluster domain
+  http:
+    tlsSecret: keycloak-tls-secret
+  db:
+    vendor: postgres
+    host: postgresql-db
+    port: 5432
+    database: keycloak
+    usernameSecret:
+      name: keycloak-db-secret
+      key: username
+    passwordSecret:
+      name: keycloak-db-secret
+      key: password
+  ingress:
+    enabled: true                                      # Operator creates the Route automatically
+  proxy:
+    headers: xforwarded

@@ -1,0 +1,86 @@
+# infra/phase25/keycloak-postgresql.yaml
+# PostgreSQL 15 backend for Keycloak — uses PVC for data persistence
+apiVersion: v1
+kind: Secret
+metadata:
+  name: keycloak-db-secret
+  namespace: rhbok-operator
+type: Opaque
+stringData:
+  username: keycloak
+  password: KeycloakDBPass123!       # ← CHANGE in production
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: keycloak-postgresql-data
+  namespace: rhbok-operator
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: thin-csi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgresql-db
+  namespace: rhbok-operator
+  labels:
+    app: keycloak-db
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak-db
+  template:
+    metadata:
+      labels:
+        app: keycloak-db
+    spec:
+      containers:
+        - name: postgresql-db
+          image: registry.redhat.io/rhel9/postgresql-15:latest
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRESQL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-db-secret
+                  key: username
+            - name: POSTGRESQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-db-secret
+                  key: password
+            - name: POSTGRESQL_DATABASE
+              value: keycloak
+          volumeMounts:
+            - name: postgresql-data
+              mountPath: /var/lib/pgsql/data
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+      volumes:
+        - name: postgresql-data
+          persistentVolumeClaim:
+            claimName: keycloak-postgresql-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgresql-db
+  namespace: rhbok-operator
+spec:
+  selector:
+    app: keycloak-db
+  ports:
+    - port: 5432
+      targetPort: 5432

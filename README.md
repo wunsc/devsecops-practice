@@ -130,7 +130,7 @@ devsecops-project/
     inventory-service/     Java 21 Spring Boot (stock tracking, product catalog)
     payment-service/       Java 21 Spring Boot (payments, fraud check)
 
-  infra/                 Infrastructure manifests (phases 1-24)
+  infra/                 Infrastructure manifests (phases 1-27)
     phase1/                Namespaces, RBAC, NetworkPolicies, quotas
     phase2/                GitLab CE
     phase3/                SonarQube CE
@@ -149,6 +149,9 @@ devsecops-project/
     phase22/               Distributed tracing (Tempo, OTel Collector, auto-instrumentation)
     phase23/               Performance testing (k6 pipeline integration, 1 dashboard)
     phase24/               Production hardening (chaos tests, backups, compliance)
+    phase25/               Keycloak (RHBK v26.4) — OIDC provider for RHTAS + RHTPA
+    phase26/               RHTAS v1.4.0 (Sigstore) — keyless image signing (Fulcio, Rekor, CTLog)
+    phase27/               RHTPA v1.1.4 (Trustify) — SBOM management, vulnerability analysis
 
   docs/                  Documentation & tutorials
     tutorial/              23-module hands-on learning path (~30 hours, 6 tracks)
