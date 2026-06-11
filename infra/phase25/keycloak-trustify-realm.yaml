@@ -45,3 +45,11 @@ spec:
         standardFlowEnabled: false
         directAccessGrantsEnabled: true
         serviceAccountsEnabled: true
+      - clientId: walker
+        enabled: true
+        clientAuthenticatorType: client-secret
+        secret: walker-secret-rhtpa-2026               # Used by Jenkins generateSBOM.groovy
+        publicClient: false
+        standardFlowEnabled: false
+        directAccessGrantsEnabled: true
+        serviceAccountsEnabled: true

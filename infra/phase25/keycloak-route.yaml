@@ -1,0 +1,27 @@
+# infra/phase25/keycloak-route.yaml
+# Manual Route for Keycloak — uses reencrypt TLS termination
+# (ingress.enabled=false in Keycloak CR, so the operator does NOT create this)
+#
+# The destinationCACertificate must match the cert in keycloak-tls-secret.
+# Generate it with: oc get secret keycloak-tls-secret -n rhbok-operator -o jsonpath='{.data.tls\.crt}' | base64 -d
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: keycloak
+  namespace: rhbok-operator
+  labels:
+    app: keycloak
+spec:
+  host: keycloak.apps.<CLUSTER_DOMAIN>                 # ← REPLACE
+  port:
+    targetPort: 8443
+  tls:
+    termination: reencrypt
+    insecureEdgeTerminationPolicy: Redirect
+    destinationCACertificate: |
+      # Paste the content of your keycloak-tls-secret tls.crt here
+      # Run: oc get secret keycloak-tls-secret -n rhbok-operator -o jsonpath='{.data.tls\.crt}' | base64 -d
+  to:
+    kind: Service
+    name: keycloak-service
+    weight: 100

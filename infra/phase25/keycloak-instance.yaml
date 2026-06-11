@@ -23,6 +23,6 @@ spec:
       name: keycloak-db-secret
       key: password
   ingress:
-    enabled: true                                      # Operator creates the Route automatically
+    enabled: false                                     # Route is created manually (reencrypt TLS termination)
   proxy:
     headers: xforwarded
